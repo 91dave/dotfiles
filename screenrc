@@ -22,3 +22,4 @@ activity "Activity in %t(%n)"
 
 shelltitle "shell"
 #shell -$SHELL
+# upstream change...
