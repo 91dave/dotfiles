@@ -8,7 +8,7 @@ cp lib/* ~/.dotfiles
 
 echo '# Settings imported from https://github.com/91dave/dotfiles' >> ~/.bashrc
 echo 'source ~/.bash_prefs' >> ~/.bashrc
-echo 'source ~/.dotfiles/*.sh' >> ~/.bashrc
+echo 'for f in ~/.dotfiles/*.sh; do source $f; done' >> ~/.bashrc
 echo '' >> ~/.bashrc
 
 cp dircolors ../.dircolors
