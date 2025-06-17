@@ -38,6 +38,8 @@ function khelp {
     echo "kaudit                    : Audit running nodes and pods in selected clusters"
     echo "kaudit_nodes [cluster]    : Audit running nodes in [cluster]"
     echo "kaudit_pods [cluster]     : Audit running pods in [cluster]"
+    echo "hls [namespace]           : List helm services in [namespace]"
+    echo "hla                       : List all broken or pending helm services across all namespaces"
 }
 alias kkp='kubectl delete pod -n'
 alias kgs='kubectl get services -n'
@@ -49,6 +51,11 @@ alias kgl='kubectl logs -n'
 alias kgxx='kubectl exec -tin'
 alias kg='kubectl get -n'
 alias kd='kubectl describe -n'
+alias hls='helm list -an'
+
+function hla {
+  helm ls -aA | awk '$8 != "deployed" || NR==1'
+}
 
 function kgp {
     env=$1
