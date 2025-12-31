@@ -39,7 +39,16 @@ chmod 755 ansi
 sudo mv ansi /usr/local/bin/
 ```
 
-## Usage
+## Documentation
 
-- Run `khelp` to get a list of all the Kubernetes aliases and functions
-- Run `tphelp` to get a list of all the Telepresence aliases and functions
+Comprehensive documentation for all helper functions and aliases is available in the [docs/](docs/) folder.
+
+**Quick reference:**
+- `aws_help` - AWS helpers
+- `dev_help` - Development helpers
+- `khelp` - Kubernetes helpers
+- `tphelp` - Telepresence helpers
+- `tfhelp` - Terraform helpers
+- `wsl_help` - WSL integration helpers
+
+See the [full documentation index](docs/README.md) for detailed guides, examples, and workflows.
