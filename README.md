@@ -28,8 +28,8 @@ These can be installed by running the following in a terminal:
 ```bash
 cd
 git clone https://github.com/91dave/bash-prefs.git
-chmod +x install.sh
-./install.sh
+chmod +x manage.sh
+./manage.sh install
 ```
 
 Additonally, you might like to use the very helpful [ANSI Code generator](https://github.com/fidian/ansi) to easily colourize output in your scripts.
