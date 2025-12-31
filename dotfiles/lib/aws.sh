@@ -61,7 +61,7 @@ function aws_secrets_json_validity() {
     aws secretsmanager list-secrets | jq .SecretList[].Name -r | grep -e "$search" | while read secret
     do
         aws secretsmanager get-secret-value --secret-id $secret | jq .SecretString -r > .secret.tmp
-        first_char=$(head -c1 .secret.tmp)
+        first_char=$(tr -d '[:space:]' < .secret.tmp | head -c1)
 
         # Skip plaintext secrets (only validate if starts with { or [)
         if [[ "$first_char" != "{" && "$first_char" != "[" ]]; then
