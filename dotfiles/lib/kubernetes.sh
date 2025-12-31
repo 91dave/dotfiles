@@ -23,24 +23,39 @@ done
 
 # Help
 function khelp {
-    echo "use-[cluster]             : Switch context to [cluster]"
-    echo "kgns                      : List namespaces on current cluster"
-    echo "kgs [namespace]           : List services for [namespace]"
-    echo "kgp [namespace] [app?]    : List pods for [namespace]"
-    echo "kgr [namespace] [svc?]    : Get status of an ongoing rollout against [svc]"
-    echo "kgo [namespace]           : List outstanding pods for [namespace]"
-    echo "kdp [namespace] [pod]     : Describe pod [pod] within [namespace]"
-    echo "kkp [namespace] [pod]     : Kill pod [pod] within [namespace]"
-    echo "kgl [namespace] [pod]     : Get logs for [pod] within [namespace]"
-    echo "kgx [ns] [search|pod] [cmd]   : Execute [command] against [pod] (or first pod matching [search] within namespace [ns]"
-    echo "kgn                       : Get nodes for cluster"
-    echo "kppn                      : Count of pods per node in the cluster"
-    echo "kdn [node]                : Describe [node]"
-    echo "kaudit                    : Audit running nodes and pods in selected clusters"
-    echo "kaudit_nodes [cluster]    : Audit running nodes in [cluster]"
-    echo "kaudit_pods [cluster]     : Audit running pods in [cluster]"
-    echo "hls [namespace]           : List helm services in [namespace]"
-    echo "hla                       : List all broken or pending helm services across all namespaces"
+    echo "☸️  Kubernetes Helpers"
+    echo ""
+    echo "🔄 Context switching:"
+    echo "  use-[cluster]             Switch to [cluster] context"
+    echo ""
+    echo "📋 Listing:"
+    echo "  kgns                      List namespaces"
+    echo "  kgs [ns]                  List services"
+    echo "  kgp [ns] [app?]           List pods (optionally filter by app)"
+    echo "  kgn                       List nodes"
+    echo "  kgo [ns]                  List non-ready/terminating pods"
+    echo "  kg [ns] [resource]        Get any resource"
+    echo ""
+    echo "🔍 Details:"
+    echo "  kdp [ns] [pod]            Describe pod"
+    echo "  kdn [node]                Describe node"
+    echo "  kd [ns] [resource]        Describe any resource"
+    echo "  kgl [ns] [pod]            Get pod logs"
+    echo "  kgr [ns] [svc]            Get rollout status"
+    echo ""
+    echo "⚡ Actions:"
+    echo "  kgx [ns] [pod] [cmd]      Execute command in pod"
+    echo "  kgxx [ns] [pod]           Exec interactive shell"
+    echo "  kkp [ns] [pod]            Kill pod"
+    echo "  kcp [ns] [app] [src] [dest]  Copy file to pods"
+    echo ""
+    echo "📊 Stats:"
+    echo "  kppn [ns?]                Pods per node count"
+    echo "  kaudit                    Audit nodes and pods across clusters"
+    echo ""
+    echo "🎡 Helm:"
+    echo "  hls [ns]                  List helm releases"
+    echo "  hla                       List broken/pending releases"
 }
 alias kkp='kubectl delete pod -n'
 alias kgs='kubectl get services -n'
@@ -84,7 +99,8 @@ function kgxh {
 
     pod=$(kubectl get pods -n $env | grep $app | grep -v '0/' | grep -v Terminating | head -n1 | awk '{ print $1 }')
 
-    echo kubectl exec -tin $env $pod -- $cmd
+    echo "🔗 Connecting to $pod..."
+    echo "   kubectl exec -tin $env $pod -- $cmd"
     kubectl exec -tin $env $pod -- $cmd
 
 }
@@ -123,14 +139,14 @@ function kppn {
         pods=$(kubectl get pods --all-namespaces | tail -n+2 | wc -l)
         nodes=$(kubectl get nodes | tail -n+2 | wc -l)
 
-        echo "$pods Pods on $nodes Nodes"
+        echo "📊 $pods pods across $nodes nodes (all namespaces)"
         kubectl get pods --all-namespaces -o wide --sort-by=.spec.nodeName | tail -n+2 | awk '{print $8}' | uniq -c | sort -n
     else
         env=$1
         pods=$(kubectl get pods -n $env | tail -n+2 | wc -l)
         nodes=$(kubectl get pods -n $env -o wide --sort-by=.spec.nodeName | tail -n+2 | awk '{print $7}' | uniq | wc -l)
 
-        echo "$pods Pods on $nodes Nodes"
+        echo "📊 $pods pods across $nodes nodes ($env)"
         kubectl get pods -n $env -o wide --sort-by=.spec.nodeName | tail -n+2 | awk '{print $7}' | uniq -c | sort -n
     fi
 
@@ -144,14 +160,14 @@ function kgo {
 
 function kaudit_nodes {
     cluster=$1
-    
+
     var="PREF_k8s_$cluster"
     context="${!var}"
     original=$(kubectl config get-contexts | grep '*' | awk '{print $2}')
     kubectl config use-context $context >& /dev/null
 
     count=$(kubectl get nodes | grep -v ^NAME | wc -l)
-    echo "$cluster nodes: ($count total)"
+    echo "🖥️  $cluster nodes ($count total)"
     kubectl get nodes | awk '{print $3}' | grep -v ^ROLES | sort | uniq -c
     echo "";
 
@@ -169,7 +185,7 @@ function kaudit_pods {
     filter=$(echo $PREF_k8s_audit_namespaces | tr ' ' '|')
 
     count=$(kubectl get pods --all-namespaces | grep -E "^($filter)" | grep -v ^NAME | wc -l)
-    echo "$cluster pods: ($count total)"
+    echo "🫛 $cluster pods ($count total)"
     kubectl get pods --all-namespaces | grep -E "^($filter)" | awk '{print $1}' | sort | uniq -c
     echo "";
 
@@ -177,6 +193,8 @@ function kaudit_pods {
 }
 
 function kaudit {
+    echo "📊 Kubernetes Audit"
+    echo ""
     for cluster in $PREF_k8s_audit_clusters
     do
         kaudit_nodes $cluster

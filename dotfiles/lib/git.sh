@@ -28,61 +28,127 @@ fetch_repos() {
     local repo_list="$REPO_CACHE"
 
     if [[ ! -f "$repo_list" ]]; then
-        echo "Error: repo list file not found: $repo_list"
+        echo "❌ Error: repo list file not found: $repo_list"
         return 1
     fi
 
     while read -r repo; do
         [[ -z "$repo" || "$repo" =~ ^# || "$repo" =~ '\.bak' || "$repo" =~ "_backup" ]] && continue
-        
+
         local repo_path="$folder/$repo"
-        
+
         if [[ -d "$repo_path/.git" ]]; then
-            echo "Fetching: $repo"
-			pushd $repo_path >& /dev/null
+            echo "🔄 $repo"
+            pushd $repo_path >& /dev/null
 
-            git.exe </dev/null fetch origin main 2>/dev/null || 
-            git.exe </dev/null fetch origin master 2>/dev/null ||
-            echo "  Warning: could not fetch main/master for $repo"
-			
-			local branch=$(git.exe </dev/null branch --show-current)
-			local is_dirty=$(git.exe </dev/null status --porcelain)
+            # Fetch (try main, then master)
+            local fetch_branch="main"
+            if ! git.exe </dev/null fetch origin main 2>/dev/null; then
+                fetch_branch="master"
+                if ! git.exe </dev/null fetch origin master 2>/dev/null; then
+                    echo "   ⚠️  Could not fetch main/master"
+                    popd >& /dev/null
+                    continue
+                fi
+            fi
 
-			if [[ "$branch" == "main" || "$branch" == "master" ]] && [[ -z "$is_dirty" ]]; then
-				#echo "  Pulling: on $branch with clean working tree"
-				git.exe </dev/null pull origin "$branch" >& /dev/null
-			else
-				echo "  Skipping pull: on '$branch', dirty: ${is_dirty:+yes}"
-			fi
+            # Count new commits
+            local commits=$(git.exe </dev/null rev-list --count HEAD..origin/$fetch_branch 2>/dev/null || echo "0")
+            [[ "$commits" -gt 0 ]] && echo "   📥 $commits new commit(s)"
 
+            # Check if we can pull
+            local branch=$(git.exe </dev/null branch --show-current)
+            local is_dirty=$(git.exe </dev/null status --porcelain)
 
-			popd >& /dev/null
+            if [[ "$branch" == "main" || "$branch" == "master" ]] && [[ -z "$is_dirty" ]]; then
+                git.exe </dev/null pull origin "$branch" >& /dev/null
+                [[ "$commits" -gt 0 ]] && echo "   ✅ Pulled"
+            else
+                # Build skip reason
+                local reason=""
+                [[ "$branch" != "main" && "$branch" != "master" ]] && reason="on $branch"
+                [[ -n "$is_dirty" ]] && reason="${reason:+$reason, }uncommitted changes"
+                echo "   ⏭️  Skipped pull ($reason)"
+            fi
+
+            popd >& /dev/null
         else
-            echo "Skipping (not a git repo): $repo"
+            echo "⏭️  $repo (not a git repo)"
         fi
     done < "$repo_list"
 }
 
 update_repo_cache() {
+	echo "🔍 Scanning for repos in $REPO_HOME..."
 	find_git_repos "$REPO_HOME" 4 | grep -v _backup | grep -v '\.bak' > $REPO_CACHE
+	local count=$(wc -l < $REPO_CACHE)
+	echo "✅ Found $count repos, cache updated"
+}
+
+gwt_clear() {
+    local count=$(find "$WORKTREE_HOME" -maxdepth 1 -mindepth 1 -type d ! -name '.*' 2>/dev/null | wc -l)
+
+    if [ "$count" -eq 0 ]; then
+        echo "📭 No worktrees found in $WORKTREE_HOME"
+        return
+    fi
+
+    echo "🗑️  Found $count folder(s) in $WORKTREE_HOME:"
+    ls -1d "$WORKTREE_HOME"/*/ 2>/dev/null | xargs -n1 basename
+    echo ""
+    read -p "Remove all worktrees? [y/N] " confirm
+
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo "❌ Aborted."
+        return
+    fi
+
+    for folder in "$WORKTREE_HOME"/*/; do
+        [ -d "$folder" ] || continue
+
+        folder_name=$(basename "$folder")
+        echo "🔄 Processing: $folder_name"
+
+        pushd "$folder" >& /dev/null || continue
+
+        main_worktree=$(git.exe worktree list 2>/dev/null | head -n1 | awk '{print $1}')
+
+        if [ -z "$main_worktree" ]; then
+            echo "  ⚠️  Not a git worktree, skipping"
+            popd >& /dev/null
+            continue
+        fi
+
+        popd >& /dev/null
+
+        main_worktree_wsl=$(wslpath "$main_worktree" 2>/dev/null || echo "$main_worktree")
+        pushd "$main_worktree_wsl" >& /dev/null || continue
+
+        echo "  ✅ Removing from: $(basename "$main_worktree")"
+        git.exe worktree remove "$(wslpath -w "$folder")"
+
+        popd >& /dev/null
+    done
 }
 
 gwt_usage() {
-
-    echo "-- Git WorkTrees --"
+    echo "🌳 Git WorkTrees"
     echo "Opinionated helper script for managing git worktrees"
     echo "Relies on having an up-to-date cache of repos in $REPO_HOME"
     echo "Update the repo cache by running: update_repo_cache"
     echo ""
-    echo "Repo-scoped commands: (must be run from a repository folder)"
-    echo "  gwt                     List worktrees in current repo"
-    echo "  add [branch]            Create worktree of current repo in $WORKTREE_HOME on [branch]"
-    echo "  rm [branch]             Delete worktree of current repo from $WORKTREE_HOME named [branch]"
+    echo "📍 Repo-scoped commands: (must be run from a repository folder)"
+    echo "  gwt                     📋 List worktrees in current repo"
+    echo "  gwt add [branch]        ➕ Create worktree on [branch]"
+    echo "  gwt rm [branch]         ➖ Delete worktree named [branch]"
     echo ""
-    echo "Global commands:"
-    echo "  rm|add [repo] [branch]  Find repo matching [repo] in the cache and create or delete workspace as if run from that repo"
+    echo "🌐 Global commands:"
+    echo "  gwt ls                     📋 List all worktrees in workspace"
+    echo "  gwt rm|add [repo] [branch] 🔍 Find repo and create/delete worktree"
+    echo "  gwt_clear                  🗑️  Remove all worktrees"
     echo ""
-    echo "Using 'code' instead of 'add' will spin up a VS Code instance inside $WORKTREE_HOME when complete"
+    echo "💡 Use 'code' instead of 'add' to open VS Code when complete"
+    echo "💡 Use 'claude' instead of 'add' to open Claude Code when complete"
 }
 
 gwt() {
@@ -93,11 +159,37 @@ gwt() {
         return
     fi
 
-    # Arg parsing and usage
-    [ -z "$2" ] && gwt_usage && return
-
     cmd=$1
     branch=$2
+
+    # ls command doesn't require additional args
+    if [ "$cmd" = "ls" ]; then
+        echo "📂 Worktrees in $WORKTREE_HOME:"
+        echo ""
+        for wt in "$WORKTREE_HOME"/*/; do
+            [ -d "$wt" ] || continue
+            wt_name=$(basename "$wt")
+            pushd "$wt" >& /dev/null || continue
+
+            main_worktree=$(git.exe worktree list 2>/dev/null | head -n1 | awk '{print $1}')
+            wt_branch=$(git.exe branch --show-current 2>/dev/null)
+
+            if [ -z "$main_worktree" ]; then
+                echo "  ⚠️  $wt_name (not a git worktree)"
+                popd >& /dev/null
+                continue
+            fi
+
+            repo_name=$(basename "$main_worktree")
+            popd >& /dev/null
+            echo "  📁 $wt_name"
+            echo "     └─ 🔗 $repo_name  🌿 $wt_branch"
+        done
+        return
+    fi
+
+    # Other commands require a branch argument
+    [ -z "$2" ] && gwt_usage && return
 
     # If we are not currently in a repo, find one using $2 as a search
 	if [ "$(is_repo)" = "false" ]
@@ -107,7 +199,7 @@ gwt() {
 
         [ -z "$search" ] && gwt_usage && return
         results=$(cat $REPO_CACHE | grep $search | wc -l)
-        echo "Found $results repos for '$search'" 
+        echo "🔍 Found $results repos for '$search'" 
 
         [ "$results" = "1" ] || return
 
@@ -145,30 +237,25 @@ gwt() {
     fi
 
     # Validate folder and worktree match
-    [ "$worktree_exists" = "false" ] && [ "$folder_exists" = "true" ] && echo "Folder '$folder' exists in workspace, but is not a valid worktree"
+    [ "$worktree_exists" = "false" ] && [ "$folder_exists" = "true" ] && echo "⚠️  Folder '$folder' exists in workspace, but is not a valid worktree"
 
     case "$cmd" in
 
-        # TODO - new ls command that lists which repos/worktrees are in the workspace
-
-        # TODO - new clear command (perhaps with a warning/confirm??) to safely delete out all worktrees
-        #   does `git worktree remove .` work when inside a given worktree??
-
         rm)
-            [ "$worktree_exists" = "true" ] && echo "Deleting worktree ${folder}..." && git.exe worktree remove "$(wslpath -w $WORKTREE_HOME/$folder)"
-            [ "$worktree_exists" = "true" ] || echo "Worktree ${folder} does not exist, skipping..."
+            [ "$worktree_exists" = "true" ] && echo "🗑️  Deleting worktree ${folder}..." && git.exe worktree remove "$(wslpath -w $WORKTREE_HOME/$folder)"
+            [ "$worktree_exists" = "true" ] || echo "⏭️  Worktree ${folder} does not exist, skipping..."
             ;;
         add|claude|code)
             branch_flag="-b"
             [ "$branch_exists" = "true" ] && branch_flag=""
-            [ "$worktree_exists" = "true" ] && echo "Worktree ${folder} already exists, skipping..."
-            [ "$worktree_exists" = "true" ] || echo "Creating worktree ${folder}..." && git.exe worktree add "$(wslpath -w $WORKTREE_HOME/$folder)" $branch_flag $branch
+            [ "$worktree_exists" = "true" ] && echo "⏭️  Worktree ${folder} already exists, skipping..."
+            [ "$worktree_exists" = "true" ] || echo "➕ Creating worktree ${folder}..." && git.exe worktree add "$(wslpath -w $WORKTREE_HOME/$folder)" $branch_flag $branch
             ;;
         *)
             ;;
 
     esac
 
-    [ "$cmd" = "code" ] && (cd $WORKTREE_HOME && cmd.exe /c code .)
-    [ "$cmd" = "claude" ] && (cd $WORKTREE_HOME && cmd.exe /c claude)
+    [ "$cmd" = "code" ] && echo "🚀 Opening VS Code..." && (cd $WORKTREE_HOME/$folder && cmd.exe /c code .)
+    [ "$cmd" = "claude" ] && echo "🤖 Opening Claude Code..." && (cd $WORKTREE_HOME/$folder && cmd.exe /c claude)
 }
