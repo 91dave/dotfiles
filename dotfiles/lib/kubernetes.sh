@@ -27,6 +27,7 @@ function khelp {
     echo "kgns                      : List namespaces on current cluster"
     echo "kgs [namespace]           : List services for [namespace]"
     echo "kgp [namespace] [app?]    : List pods for [namespace]"
+    echo "kgr [namespace] [svc?]    : Get status of an ongoing rollout against [svc]"
     echo "kgo [namespace]           : List outstanding pods for [namespace]"
     echo "kdp [namespace] [pod]     : Describe pod [pod] within [namespace]"
     echo "kkp [namespace] [pod]     : Kill pod [pod] within [namespace]"
@@ -67,6 +68,13 @@ function kgp {
     else
         kubectl get pods -n $env | grep $app
     fi
+}
+
+function kgr {
+    env=$1
+    app=$2
+
+    kubectl rollout status deployment/$app -n $env
 }
 
 function kgxh {
