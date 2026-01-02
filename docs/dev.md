@@ -11,6 +11,7 @@ alias docker="podman.exe"
 alias docker-compose="podman.exe compose"
 alias dotnet="dotnet.exe"
 alias gh="gh.exe"
+alias claude="npx @anthropic-ai/claude-code"
 ```
 
 ## Functions
@@ -153,6 +154,18 @@ gh pr create
 
 # Check workflow runs
 gh run list
+```
+
+### Claude Code
+
+Access Claude Code via npx:
+
+```bash
+# Start Claude Code in current directory
+claude
+
+# Start in specific directory
+claude /path/to/project
 ```
 
 ## Usage Tips

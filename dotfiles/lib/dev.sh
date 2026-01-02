@@ -17,6 +17,7 @@ alias docker="podman.exe"
 alias docker-compose="podman.exe compose"
 alias dotnet="dotnet.exe"
 alias gh="gh.exe"
+alias claude="npx @anthropic-ai/claude-code"
 
 function epoch() {
     date -d "@$1"

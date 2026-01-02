@@ -2,6 +2,7 @@ colorscheme torte
 syntax on
 map t :tabedit 
 set autoindent
+set autoread
 set expandtab
 set foldmethod=marker
 set hlsearch
@@ -9,3 +10,4 @@ set nu
 set shiftwidth=4
 set tabstop=4
 set vb
+map <C-p> :vert term<CR><C-w>r

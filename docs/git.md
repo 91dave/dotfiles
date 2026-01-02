@@ -59,17 +59,29 @@ find_git_repos "/mnt/c/Code" 4
 find_git_repos
 ```
 
-### update_repo_cache
+### repos
+
+Multi-purpose command for managing all repositories in the cache.
+
+```bash
+repos [subcommand]
+# or
+repo [subcommand]  # alias
+```
+
+**Subcommands:**
+
+#### repos cache
 
 Scans for repositories and updates the cache file.
 
 ```bash
-update_repo_cache
+repos cache
 ```
 
 **Example:**
 ```bash
-update_repo_cache
+repos cache
 # Output:
 # 🔍 Scanning for repos in /mnt/c/Code...
 # ✅ Found 23 repos, cache updated
@@ -77,23 +89,24 @@ update_repo_cache
 
 **Note:** The cache file excludes folders with `_backup` or `.bak` in the name.
 
-### fetch_repos
+#### repos fetch
 
 Fetches updates for all cached repositories and auto-pulls when safe.
 
 ```bash
-fetch_repos
+repos fetch
 ```
 
 **How it works:**
 1. Reads repositories from the cache file
 2. For each repository:
    - Fetches from origin (tries `main`, then `master`)
-   - Counts new commits
+   - Counts new commits (skips repos with no new commits)
    - Auto-pulls if:
      - Current branch is `main` or `master`
      - Working directory is clean (no uncommitted changes)
-   - Otherwise, displays why pull was skipped
+   - Otherwise, categorizes why pull was skipped
+3. Provides summary of skipped repos grouped by reason
 
 **Example output:**
 ```
@@ -102,9 +115,126 @@ fetch_repos
    ✅ Pulled
 🔄 another-project
    📥 1 new commit(s)
-   ⏭️  Skipped pull (on feature-branch)
-🔄 work-in-progress
-   ⏭️  Skipped pull (uncommitted changes)
+
+⏭️  Skipped pull for 2 repo(s):
+
+   Uncommitted changes:
+      work-in-progress
+
+   Different branch:
+      another-project (feature-branch)
+```
+
+#### repos status
+
+Checks status of all cached repositories.
+
+```bash
+repos status
+```
+
+**Shows:**
+- Repos not on main/master branch
+- Repos with uncommitted changes
+
+**Example output:**
+```
+🔍 Checking repo status...
+
+🌿 Not on main (2):
+   📁 myapp (feature-branch)
+   📁 another-project (hotfix)
+
+✏️  Uncommitted changes (1):
+   📁 work-in-progress (main, 3 file(s))
+```
+
+#### repos main
+
+Switches all repositories to their main branch (main or master).
+
+```bash
+repos main
+```
+
+**Safety features:**
+- Only switches repos not currently on main
+- Skips repos with uncommitted changes
+- Skips repos with unmerged commits
+- Shows summary of switched and skipped repos
+
+**Example output:**
+```
+🔄 Switching repos to main branch...
+
+✅ myapp: feature-branch → main
+✅ another-project: develop → main
+
+✅ Switched 2 repo(s) to main
+
+⏭️  Skipped 2 repo(s):
+
+   Uncommitted changes:
+      work-in-progress (feature-x)
+
+   Unmerged commits:
+      new-feature (feature-y, 3 commit(s))
+```
+
+#### repos ls
+
+Lists all branches that have been merged into main/master.
+
+```bash
+repos ls
+```
+
+**Example output:**
+```
+🔍 Scanning repos for merged branches...
+
+📁 myapp
+   🌿 feature/old-feature
+   🌿 hotfix/bug-123
+
+📁 another-project
+   🌿 feature/completed
+
+✅ Found 3 merged branch(es) across 2 repo(s)
+```
+
+#### repos clear
+
+Deletes all branches that have been merged into main/master.
+
+```bash
+repos clear
+```
+
+**Safety features:**
+- Never deletes main, master, or current branch
+- Only deletes branches fully merged
+
+**Example output:**
+```
+🗑️  Deleting merged branches...
+
+📁 myapp
+   ✅ Deleted: feature/old-feature
+   ✅ Deleted: hotfix/bug-123
+
+📁 another-project
+   ✅ Deleted: feature/completed
+
+✅ Deleted 3 branch(es)
+```
+
+#### repos help
+
+Displays help information for the repos command.
+
+```bash
+repos help
 ```
 
 ## Git Worktree Management
@@ -117,6 +247,8 @@ Displays usage information for git worktree commands.
 
 ```bash
 gwt_usage
+# or
+gwt help
 ```
 
 ### gwt
@@ -153,75 +285,102 @@ Shows all worktrees across all repositories in your workspace.
 
 #### Create worktree
 ```bash
-gwt add [branch]
+gwt add [branch]           # Tagless (uses repo name as folder)
+gwt add -b [branch]        # Tagged (uses repo-branch as folder)
 ```
 Creates a new worktree for the specified branch.
+
+**Folder naming:**
+- Without `-b`: Uses repo name only (e.g., `myapp`)
+- With `-b`: Uses repo-branch format (e.g., `myapp-new-feature`)
+- If folder exists, automatically uses tagged format
+
+**Auto-switching:**
+If the main repo is currently on the branch you're creating a worktree for (with uncommitted changes), the command will fail and ask you to commit or stash first. If clean, it auto-switches the main repo to main/master.
 
 **Example:**
 ```bash
 # From within a repository
 cd /mnt/c/Code/myapp
 gwt add feature/new-feature
+# Creates: /mnt/c/Code/workspace/myapp
 
-# Creates: /mnt/c/Code/workspace/myapp-new-feature
+gwt add -b feature/another-feature
+# Creates: /mnt/c/Code/workspace/myapp-another-feature
 ```
 
 **With repository search:**
 ```bash
 # From anywhere
 gwt add myapp feature/new-feature
+gwt add myapp -b feature/another-feature
 ```
 
 #### Remove worktree
 ```bash
-gwt rm [branch]
+gwt rm              # Remove tagless worktree (repo name folder)
+gwt rm [branch]     # Remove tagged worktree (repo-branch folder)
 ```
 Deletes the specified worktree.
 
 **Example:**
 ```bash
 # From within a repository
-gwt rm feature/old-feature
+gwt rm                    # Removes /workspace/myapp
+gwt rm feature/old-feature  # Removes /workspace/myapp-old-feature
 
 # From anywhere (with repo search)
-gwt rm myapp old-feature
+gwt rm myapp             # Removes tagless worktree
+gwt rm myapp old-feature # Removes tagged worktree
 ```
 
 #### Create and open in VS Code
 ```bash
-gwt code [branch]
+gwt code [branch]           # Tagless
+gwt code -b [branch]        # Tagged
 ```
 Creates a worktree and immediately opens it in VS Code.
 
 **Example:**
 ```bash
 gwt code feature/new-ui
+# Creates worktree and runs: code /mnt/c/Code/workspace/myapp
+
+gwt code -b feature/new-ui
 # Creates worktree and runs: code /mnt/c/Code/workspace/myapp-new-ui
+```
+
+**Special usage:**
+```bash
+gwt code
+# Opens VS Code in the workspace directory itself
 ```
 
 #### Create and open in Claude Code
 ```bash
-gwt claude [branch]
+gwt claude [branch]         # Tagless
+gwt claude -b [branch]      # Tagged
 ```
 Creates a worktree and immediately opens it in Claude Code.
 
 **Example:**
 ```bash
 gwt claude feature/refactor-api
+# Creates worktree and runs: claude /mnt/c/Code/workspace/myapp
+
+gwt claude -b feature/refactor-api
 # Creates worktree and runs: claude /mnt/c/Code/workspace/myapp-refactor-api
 ```
 
-### gwt_clear
-
-Removes all worktrees from the workspace directory.
-
+#### Clear all worktrees
 ```bash
-gwt_clear
+gwt clear
 ```
+Removes all worktrees from the workspace directory.
 
 **Example:**
 ```bash
-gwt_clear
+gwt clear
 # Output:
 # 🗑️  Found 5 folder(s) in /mnt/c/Code/workspace:
 # myapp-feature-1
@@ -240,19 +399,32 @@ gwt_clear
 
 ## Worktree Naming Convention
 
-Worktrees are automatically named based on the repository and branch:
+Worktrees can be named in two ways:
 
+### Tagless (default)
+```
+{project}
+```
+Uses just the repository name as the folder name.
+
+**Example:**
+- Repo: `myapp` → Worktree: `myapp`
+
+### Tagged (with -b flag)
 ```
 {project}-{tag}
 ```
-
-Where:
-- `project` is the repository name (shortened if it contains hyphens)
-- `tag` is the last component of the branch name
+Uses repository name plus branch tag.
 
 **Examples:**
 - Repo: `myapp`, Branch: `feature/new-ui` → Worktree: `myapp-new-ui`
 - Repo: `company-myapp`, Branch: `hotfix/bug-123` → Worktree: `myapp-bug-123`
+
+**Note:** If a tagless folder already exists, the tagged format is used automatically.
+
+Where:
+- `project` is the repository name (shortened if it contains hyphens)
+- `tag` is the last component of the branch name
 
 ## Workflow Examples
 
@@ -283,20 +455,33 @@ gwt rm pr/review-changes
 ### Maintenance workflow
 ```bash
 # Update repository cache weekly
-update_repo_cache
+repos cache
 
 # Fetch all repos daily
-fetch_repos
+repos fetch
+
+# Check repo status
+repos status
+
+# Switch all repos to main
+repos main
+
+# Clean up merged branches
+repos ls      # Review merged branches
+repos clear   # Delete them
 
 # Clean up old worktrees
-gwt ls  # Review what's there
-gwt_clear  # Remove all if needed
+gwt ls        # Review what's there
+gwt clear     # Remove all if needed
 ```
 
 ## Usage Tips
 
-1. **Repository Cache**: Run `update_repo_cache` after adding new repositories
-2. **Daily Updates**: Add `fetch_repos` to your startup script for automatic updates
-3. **Worktree Cleanup**: Periodically run `gwt ls` to review and `gwt_clear` to clean up
-4. **Branch Search**: When using `gwt add [repo] [branch]`, only one matching repo should exist
-5. **Quick Access**: Use `gwt code` or `gwt claude` for immediate editor integration
+1. **Repository Cache**: Run `repos cache` after adding new repositories
+2. **Daily Updates**: Add `repos fetch` to your startup script for automatic updates
+3. **Repository Management**: Use `repos status` to check all repos, `repos main` to switch to main branches
+4. **Branch Cleanup**: Use `repos ls` to find merged branches, `repos clear` to delete them
+5. **Worktree Cleanup**: Periodically run `gwt ls` to review and `gwt clear` to clean up
+6. **Naming Strategy**: Use tagless worktrees for main work, tagged (-b) for multiple branches
+7. **Branch Search**: When using `gwt add [repo] [branch]`, only one matching repo should exist
+8. **Quick Access**: Use `gwt code` or `gwt claude` for immediate editor integration
