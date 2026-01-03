@@ -67,24 +67,55 @@ echo "Using container runtime: $CONTAINER_BIN"
 $CONTAINER_BIN run hello-world
 ```
 
-### wsl_fix_exe
+### wslexe
+
+Manages WSL interoperability for executing Windows .exe files.
+
+```bash
+wslexe <subcommand>
+```
+
+**Subcommands:**
+
+#### wslexe check
+
+Checks if WSL interop is currently enabled.
+
+```bash
+wslexe check [-v]
+```
+
+**Options:**
+- `-v` - Verbose mode (only shows message if enabled)
+
+**Returns:**
+- Exit code 0 if enabled
+- Exit code 1 if disabled (with message to run `wslexe fix`)
+
+**Example:**
+```bash
+wslexe check
+# Output (if disabled): ❌ WSL interop not enabled. Run 'wslexe fix' to enable.
+
+wslexe check -v
+# Output (if enabled): ✅ WSL interop enabled
+```
+
+#### wslexe fix
 
 Enables WSL interoperability for executing Windows .exe files.
 
 ```bash
-wsl_fix_exe
+wslexe fix
 ```
 
 **What it does:**
-- Checks if WSL interop is already enabled
-- If not, registers the WSLInterop handler to execute Windows binaries
+- Registers the WSLInterop handler to execute Windows binaries
 - Requires sudo permissions
 
 **Example:**
 ```bash
-wsl_fix_exe
-# Output: ✅ WSL interop already enabled
-# OR
+wslexe fix
 # Output: 🔧 Enabling WSL interop...
 #         ✅ WSL interop enabled
 ```
@@ -98,6 +129,19 @@ wsl_fix_exe
 - Registers the MZ (PE executable) magic number handler
 - Points to `/init` as the interpreter for Windows binaries
 - Uses `binfmt_misc` kernel feature
+
+#### wslexe help
+
+Displays usage information.
+
+```bash
+wslexe help
+# or
+wslexe -h
+wslexe --help
+```
+
+**Note:** The shell automatically runs `wslexe check` on startup to validate WSL interop.
 
 ## Integration Examples
 
@@ -167,7 +211,7 @@ $GIT_BIN clone https://github.com/user/repo.git
 cmd.exe /c "echo Hello"
 
 # If it fails with "Exec format error", fix it:
-wsl_fix_exe
+wslexe fix
 
 # Try again
 cmd.exe /c "echo Hello"
@@ -224,7 +268,7 @@ git.exe worktree list
 
 1. **Prefer Windows Tools**: Windows-installed tools often have better integration (e.g., Git credential manager, Docker Desktop)
 2. **Binary Resolution**: Use `wsl_get_bin` when writing portable scripts
-3. **Interop Issues**: Run `wsl_fix_exe` after WSL updates if .exe files stop working
+3. **Interop Issues**: Run `wslexe fix` after WSL updates if .exe files stop working
 4. **Performance**: Windows executables may have slight overhead; use Linux versions for performance-critical operations
 5. **Path Conversion**: Remember to use `wslpath` when converting between Windows and WSL paths
 

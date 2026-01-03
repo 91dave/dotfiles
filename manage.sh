@@ -2,7 +2,8 @@
 
 case "$1" in
     get)
-        cp ~/.dotfiles/*.sh dotfiles/lib
+        cp ~/.dotfiles/*{.sh,.inc} dotfiles/lib
+        rm dotfiles/*secret* >& /dev/null
         cp ~/.bash_prefs dotfiles/bash.sh 
         
         cp ~/.dircolors dotfiles/dircolors

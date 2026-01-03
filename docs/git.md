@@ -136,14 +136,15 @@ repos status
 **Shows:**
 - Repos not on main/master branch
 - Repos with uncommitted changes
+- Merge status indicators for branches (whether commits are merged into main)
 
 **Example output:**
 ```
 🔍 Checking repo status...
 
 🌿 Not on main (2):
-   📁 myapp (feature-branch)
-   📁 another-project (hotfix)
+   📁 myapp (feature-branch) ✅ merged
+   📁 another-project (hotfix) ⚠️ 3 unmerged commit(s)
 
 ✏️  Uncommitted changes (1):
    📁 work-in-progress (main, 3 file(s))
@@ -181,28 +182,6 @@ repos main
       new-feature (feature-y, 3 commit(s))
 ```
 
-#### repos ls
-
-Lists all branches that have been merged into main/master.
-
-```bash
-repos ls
-```
-
-**Example output:**
-```
-🔍 Scanning repos for merged branches...
-
-📁 myapp
-   🌿 feature/old-feature
-   🌿 hotfix/bug-123
-
-📁 another-project
-   🌿 feature/completed
-
-✅ Found 3 merged branch(es) across 2 repo(s)
-```
-
 #### repos clear
 
 Deletes all branches that have been merged into main/master.
@@ -235,6 +214,40 @@ Displays help information for the repos command.
 
 ```bash
 repos help
+```
+
+#### repos code
+
+Opens VS Code in a matching repository.
+
+```bash
+repos code [search]
+```
+
+**Parameters:**
+- `search` - Repository name or partial match
+
+**Example:**
+```bash
+repos code myapp
+# Opens VS Code in the matching repository
+```
+
+#### repos cmd
+
+Opens a CMD window in a matching repository.
+
+```bash
+repos cmd [search]
+```
+
+**Parameters:**
+- `search` - Repository name or partial match
+
+**Example:**
+```bash
+repos cmd myapp
+# Opens CMD in the matching repository
 ```
 
 ## Git Worktree Management
@@ -467,7 +480,6 @@ repos status
 repos main
 
 # Clean up merged branches
-repos ls      # Review merged branches
 repos clear   # Delete them
 
 # Clean up old worktrees
@@ -480,7 +492,7 @@ gwt clear     # Remove all if needed
 1. **Repository Cache**: Run `repos cache` after adding new repositories
 2. **Daily Updates**: Add `repos fetch` to your startup script for automatic updates
 3. **Repository Management**: Use `repos status` to check all repos, `repos main` to switch to main branches
-4. **Branch Cleanup**: Use `repos ls` to find merged branches, `repos clear` to delete them
+4. **Branch Cleanup**: Use `repos clear` to delete merged branches
 5. **Worktree Cleanup**: Periodically run `gwt ls` to review and `gwt clear` to clean up
 6. **Naming Strategy**: Use tagless worktrees for main work, tagged (-b) for multiple branches
 7. **Branch Search**: When using `gwt add [repo] [branch]`, only one matching repo should exist
