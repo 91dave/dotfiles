@@ -1,6 +1,21 @@
 #!/bin/bash
 # Sourced by git.sh - do not run directly
 
+_repos_help() {
+    echo "📦 Repos"
+    echo "Manage all repos in cache"
+    echo ""
+    echo "Usage:"
+    echo "  repos fetch        🔁 Fetch all repos and pull where possible"
+    echo "  repos ls           📍 List repos not on main/master or with uncommitted changes"
+    echo "  repos main         🔄 Switch all repos to main/master branch"
+    echo "  repos clear        🗑️  Delete branches merged into main/master"
+    echo "  repos code [repo]  🚀 Open VS Code in matching repo"
+    echo "  repos cmd [repo]   💻 Open CMD window in matching repo"
+    echo "  repos cache        📂 Update cache of repos"
+    echo "  repos help         📖 Show this help message"
+}
+
 # Check if a repo line from cache should be skipped
 _repos_should_skip() {
     local repo="$1"
@@ -30,21 +45,6 @@ _repos_find() {
     fi
 
     grep "$search" "$REPO_CACHE"
-}
-
-_repos_help() {
-    echo "📦 Repos"
-    echo "Manage all repos in cache"
-    echo ""
-    echo "Usage:"
-    echo "  repos fetch        🔁 Fetch all repos and pull where possible"
-    echo "  repos ls           📍 List repos not on main/master or with uncommitted changes"
-    echo "  repos main         🔄 Switch all repos to main/master branch"
-    echo "  repos clear        🗑️  Delete branches merged into main/master"
-    echo "  repos code [repo]  🚀 Open VS Code in matching repo"
-    echo "  repos cmd [repo]   💻 Open CMD window in matching repo"
-    echo "  repos cache        📂 Update cache of repos"
-    echo "  repos help         📖 Show this help message"
 }
 
 _repos_cache() {
@@ -212,18 +212,9 @@ _repos_status() {
             fi
         fi
 
-        if [[ -n "$is_dirty" ]]; then
+        if [[ -n "$is_dirty" ]] && [[ "$current_branch" == "$default_branch" ]]; then
             local file_count=$(echo "$is_dirty" | wc -l | tr -d ' ')
-            if [[ "$current_branch" != "$default_branch" ]]; then
-                local unmerged_dirty=$(git.exe </dev/null rev-list --count "$default_branch..HEAD" 2>/dev/null || echo "0")
-                if [[ "$unmerged_dirty" -eq 0 ]]; then
-                    dirty+=("📁 $repo_name ($current_branch, $file_count file(s)) ✅ merged")
-                else
-                    dirty+=("📁 $repo_name ($current_branch, $file_count file(s)) ⚠️  $unmerged_dirty unmerged commit(s)")
-                fi
-            else
-                dirty+=("📁 $repo_name ($current_branch, $file_count file(s))")
-            fi
+            dirty+=("📁 $repo_name ($current_branch, $file_count file(s))")
         fi
 
         popd >& /dev/null
@@ -345,6 +336,22 @@ _repos_edit() {
     (cd "$repo_path" && cmd.exe /c code .)
 }
 
+_repos_view() {
+    local search="$1"
+    local repo=$(_repos_find "$search") || return 1
+
+    local repo_path="$REPO_HOME/$repo"
+    #ghd=$(wslpath "$(cmd.exe /k "echo %localappdata%\\GitHubDesktop\\GitHubDesktop.exe & exit" 2>/dev/null)")
+    #if [ -f "$ghd" ]; then
+    #    :
+    #else
+    #    echo "❌ Error: can't find GitHubDesktop.exe: BIN=$ghd"
+    #    return 1
+    #fi
+    echo "📁 Opening in $repo in GitHub Desktop"
+    (cd "$repo_path" && cmd.exe /c github)
+}
+
 _repos_cmd() {
     local search="$1"
     local repo=$(_repos_find "$search") || return 1
@@ -364,6 +371,7 @@ repos() {
     fi
 
     case "$cmd" in
+        view)      _repos_view "$2" ;;
         fetch)     _repos_fetch ;;
         cache)     _repos_cache ;;
         clear)     _repos_clear ;;

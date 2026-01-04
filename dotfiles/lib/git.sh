@@ -1,13 +1,13 @@
 #!/bin/bash
 
 ## CONFIGURATION
-REPO_HOME_WIN='C:\Code'
-WORKTREE_HOME_WIN='C:\Code\workspace'
+export REPO_HOME_WIN='C:\Code'
+export WORKTREE_HOME_WIN='C:\Code\workspace'
 
 ## Variables
-REPO_HOME=$(wslpath $REPO_HOME_WIN)
-REPO_CACHE=$REPO_HOME/repos-cache.lst
-WORKTREE_HOME=$(wslpath $WORKTREE_HOME_WIN)
+export REPO_HOME=$(wslpath $REPO_HOME_WIN)
+export REPO_CACHE=$REPO_HOME/repos-cache.lst
+export WORKTREE_HOME=$(wslpath $WORKTREE_HOME_WIN)
 
 ## Shared Helpers
 
@@ -37,5 +37,5 @@ _git_get_default_branch() {
 
 ## Source command files
 _GIT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$_GIT_SCRIPT_DIR/git-repos.inc"
-source "$_GIT_SCRIPT_DIR/git-gwt.inc"
+source "$_GIT_SCRIPT_DIR/git-repos.bash"
+source "$_GIT_SCRIPT_DIR/git-gwt.bash"

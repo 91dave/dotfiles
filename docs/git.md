@@ -250,6 +250,32 @@ repos cmd myapp
 # Opens CMD in the matching repository
 ```
 
+#### repos view
+
+Opens a matching repository in GitHub Desktop.
+
+```bash
+repos view [search]
+```
+
+**Parameters:**
+- `search` - Repository name or partial match
+
+**Example:**
+```bash
+repos view myapp
+# Opens the matching repository in GitHub Desktop
+```
+
+**Requirements:**
+- GitHub Desktop must be installed
+- The repository must have a remote configured
+
+**Use cases:**
+- Quick access to GitHub Desktop for PR reviews
+- Viewing commit history and diffs visually
+- Managing branches through a GUI
+
 ## Git Worktree Management
 
 Git worktrees allow you to have multiple working directories for a single repository, making it easy to work on multiple branches simultaneously.

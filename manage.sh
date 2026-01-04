@@ -2,7 +2,7 @@
 
 case "$1" in
     get)
-        cp ~/.dotfiles/*{.sh,.inc} dotfiles/lib
+        cp ~/.dotfiles/*{.sh,.bash} dotfiles/lib
         rm dotfiles/*secret* >& /dev/null
         cp ~/.bash_prefs dotfiles/bash.sh 
         
@@ -16,10 +16,12 @@ case "$1" in
             cp bash.sh ~/.bash_prefs
             cp lib/* ~/.dotfiles
 
-            echo '# Settings imported from https://github.com/91dave/dotfiles' >> ~/.bashrc
-            echo 'source ~/.bash_prefs' >> ~/.bashrc
-            echo 'for f in ~/.dotfiles/*; do source $f; done' >> ~/.bashrc
-            echo '' >> ~/.bashrc
+            if grep ~/.bashrc "# Settings imported from https://github.com/91dave/dotfiles"; then
+                :
+            else
+                echo '# Settings imported from https://github.com/91dave/dotfiles' >> ~/.bashrc
+                echo 'source ~/.bash_prefs' >> ~/.bashrc
+            fi
 
             cp dircolors ../.dircolors
             cp screenrc ../.screenrc

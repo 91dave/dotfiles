@@ -3,27 +3,7 @@
 function wsl_help() {
     echo "🐧 WSL Helpers"
     echo ""
-    echo "  wsl_get_bin [bins...]     Find first available binary (.exe or native)"
-    echo "  wslexe <cmd>              Manage WSL interop (check, fix, help)"
-}
-
-function wsl_get_bin() {
-
-    for bin in $@
-    do
-        if [ -n "$(which ${bin}.exe)" ]
-        then
-            echo ${bin}.exe
-            return
-        fi
-
-        if [ -n "$(which $bin)" ]
-        then
-            echo $bin
-            return
-        fi
-    done
-
+    echo "  wslexe <cmd>    Manage WSL interop (get, check, fix, help)"
 }
 
 function wslexe() {
@@ -48,12 +28,30 @@ function wslexe() {
                 echo "✅ WSL interop enabled"
             fi
             ;;
+        get)
+            shift
+            if [ -z "$1" ]; then
+                echo "Usage: wslexe get <binary...>"
+                return 1
+            fi
+            for bin in "$@"; do
+                if [ -n "$(which ${bin}.exe 2>/dev/null)" ]; then
+                    echo ${bin}.exe
+                    return
+                fi
+                if [ -n "$(which $bin 2>/dev/null)" ]; then
+                    echo $bin
+                    return
+                fi
+            done
+            ;;
         -h|--help|help|*)
             echo "🔧 wslexe - WSL interop manager"
             echo ""
             echo "Usage: wslexe <command>"
             echo ""
             echo "Commands:"
+            echo "  get <bin...>  Find first available binary (.exe or native)"
             echo "  check [-v]    Check if WSL interop is working (-v for verbose)"
             echo "  fix           Enable WSL interop for .exe files"
             echo "  help          Show this help message"
@@ -61,5 +59,5 @@ function wslexe() {
     esac
 }
 
-# Check WSL interop on shell startup
-wslexe check
+# Check WSL interop on interactive shell startup
+[[ $- == *i* ]] && wslexe check

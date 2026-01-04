@@ -14,10 +14,13 @@ wsl_help
 
 ### wsl_get_bin
 
+**Note:** This function is deprecated. Use `wslexe get` instead.
+
 Finds the first available binary from a list of candidates, preferring Windows executables (.exe) over native Linux binaries.
 
 ```bash
 wsl_get_bin [binary_names...]
+# Deprecated: use 'wslexe get [binary_names...]' instead
 ```
 
 **Parameters:**
@@ -76,6 +79,45 @@ wslexe <subcommand>
 ```
 
 **Subcommands:**
+
+#### wslexe get
+
+Finds the first available binary from a list of candidates, preferring Windows executables (.exe) over native Linux binaries.
+
+```bash
+wslexe get [binary_names...]
+```
+
+**Parameters:**
+- `binary_names...` - One or more binary names to search for
+
+**Search order:**
+1. Checks for `{binary}.exe` (Windows version)
+2. Checks for `{binary}` (Linux version)
+3. Returns the first match found
+
+**Returns:**
+The full name of the first available binary (`binary.exe` or `binary`)
+
+**Examples:**
+```bash
+# Find docker or podman (prefers .exe versions)
+DOCKER_BIN=$(wslexe get docker podman)
+echo $DOCKER_BIN
+# Output: podman.exe (if docker.exe not found)
+
+# Use the found binary
+$DOCKER_BIN ps
+
+# Find python
+PYTHON=$(wslexe get python3 python)
+$PYTHON --version
+```
+
+**Use cases:**
+1. **Cross-platform scripts**: Write scripts that work whether tools are installed in Windows or Linux
+2. **Fallback binaries**: Specify multiple alternatives (e.g., `docker` or `podman`)
+3. **Windows preference**: Automatically prefer Windows tools for better integration
 
 #### wslexe check
 
@@ -151,9 +193,9 @@ wslexe --help
 #!/bin/bash
 
 # Prefer Windows tools for better integration
-GIT=$(wsl_get_bin git)
-NODE=$(wsl_get_bin node)
-NPM=$(wsl_get_bin npm)
+GIT=$(wslexe get git)
+NODE=$(wslexe get node)
+NPM=$(wslexe get npm)
 
 # Use them transparently
 $GIT status
@@ -165,7 +207,7 @@ $NPM install
 
 ```bash
 # Used in dev.sh
-DOCKER_BIN=$(wsl_get_bin docker podman)
+DOCKER_BIN=$(wslexe get docker podman)
 
 if [ -n "$DOCKER_BIN" ]; then
     echo "Container runtime: $DOCKER_BIN"
@@ -177,7 +219,7 @@ fi
 
 ```bash
 # Check both Windows and Linux installations
-PYTHON_BIN=$(wsl_get_bin python python3)
+PYTHON_BIN=$(wslexe get python python3)
 
 if [ -n "$PYTHON_BIN" ]; then
     echo "Python found: $PYTHON_BIN"
@@ -191,7 +233,7 @@ fi
 
 ```bash
 # Use Windows git if available for better credential management
-GIT_BIN=$(wsl_get_bin git)
+GIT_BIN=$(wslexe get git)
 
 if [[ "$GIT_BIN" == *".exe" ]]; then
     echo "Using Windows Git (with credential manager)"
@@ -226,8 +268,8 @@ which docker
 which podman.exe
 which podman
 
-# Use wsl_get_bin to find the first available
-DOCKER=$(wsl_get_bin docker podman)
+# Use wslexe get to find the first available
+DOCKER=$(wslexe get docker podman)
 echo $DOCKER
 ```
 
@@ -267,7 +309,7 @@ git.exe worktree list
 ## Usage Tips
 
 1. **Prefer Windows Tools**: Windows-installed tools often have better integration (e.g., Git credential manager, Docker Desktop)
-2. **Binary Resolution**: Use `wsl_get_bin` when writing portable scripts
+2. **Binary Resolution**: Use `wslexe get` when writing portable scripts (replaces deprecated `wsl_get_bin`)
 3. **Interop Issues**: Run `wslexe fix` after WSL updates if .exe files stop working
 4. **Performance**: Windows executables may have slight overhead; use Linux versions for performance-critical operations
 5. **Path Conversion**: Remember to use `wslpath` when converting between Windows and WSL paths

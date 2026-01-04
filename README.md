@@ -45,10 +45,16 @@ Comprehensive documentation for all helper functions and aliases is available in
 
 **Quick reference:**
 - `aws_help` - AWS helpers
+- `ce <cmd>` - Container engine manager (check/fix/help)
 - `dev_help` - Development helpers
 - `khelp` - Kubernetes helpers
 - `tphelp` - Telepresence helpers
 - `tfhelp` - Terraform helpers
 - `wsl_help` - WSL integration helpers
+- `wslexe <cmd>` - WSL interop manager (get/check/fix)
+
+**Configuration variables:**
+- `SHOW_DAILY_TIPS=true` - Show daily tips on shell startup (default: true)
+- `WARN_MISSING_HELPERS=true` - Warn about missing helper utilities (default: true)
 
 See the [full documentation index](docs/README.md) for detailed guides, examples, and workflows.

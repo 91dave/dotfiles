@@ -17,3 +17,7 @@ screen -r >& /dev/null && \
 set bell-style none
 
 alias time='$(which time) --format="Time: %E CPU: %P RAM: %M kB"'
+
+# Include other dotfiles files
+for f in ~/.dotfiles/*; do source $f; done
+
