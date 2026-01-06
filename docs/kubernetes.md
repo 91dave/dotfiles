@@ -107,6 +107,54 @@ kubectl get pods -n myapp
   # Equivalent to: helm list -an myapp
   ```
 
+## Interactive Pod Manager
+
+### k8s
+
+Interactive Kubernetes pod manager with fzf integration for easy namespace and pod selection.
+
+```bash
+k8s [ns] [cmd]
+```
+
+**Modes:**
+- `k8s` - Select namespace interactively, then pod, then describe
+- `k8s <ns>` - Select pod in namespace, then describe
+- `k8s <ns> <cmd>` - Select pod and run command
+
+**Commands:**
+- `describe` (default) - Describe pod
+- `logs` - View pod logs
+- `sh` - Shell into pod
+- `rm` - Delete pod
+
+**Keybindings:**
+- `Ctrl + /` - Toggle pod details preview (shows events, logs, image info)
+
+**Examples:**
+```bash
+# Interactive namespace and pod selection
+k8s
+
+# Select pod in specific namespace
+k8s myapp
+
+# Get logs for selected pod
+k8s myapp logs
+
+# Shell into selected pod
+k8s myapp sh
+
+# Delete selected pod
+k8s myapp rm
+```
+
+**Preview panel shows:**
+- Pod details (wide format)
+- Container images
+- Recent events
+- Last 50 log lines
+
 ## Functions
 
 ### khelp

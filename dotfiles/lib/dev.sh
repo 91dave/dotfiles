@@ -19,10 +19,10 @@ function dev_help() {
 
 alias docker="podman.exe"
 alias docker-compose="podman.exe compose"
+alias podman="podman.exe"
 alias dotnet="dotnet.exe"
 alias gh="gh.exe"
 alias claude="npx @anthropic-ai/claude-code"
-
 
 
 function _warn_dev_helper() {
@@ -30,7 +30,8 @@ function _warn_dev_helper() {
 }
 
 export EZA_PREVIEW="eza --tree -l --color=always --git-ignore --no-time --no-permissions --no-user"
-export BAT_PREVIEW="batcat -n --color=always --line-range :500 --theme=Dracula"
+export BAT_PREVIEW="batcat -n --color=always --line-range :500"
+export BAT_THEME=Dracula
 
 export FZF_PREVIEW="if [ -d {} ]; then $EZA_PREVIEW {} | head -200; else $BAT_PREVIEW {}; fi"
 export FZF_DEFAULT_COMMAND="fdfind --no-ignore-parent --no-follow | sort"

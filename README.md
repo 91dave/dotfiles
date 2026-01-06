@@ -48,6 +48,7 @@ Comprehensive documentation for all helper functions and aliases is available in
 - `ce <cmd>` - Container engine manager (check/fix/help)
 - `dev_help` - Development helpers
 - `khelp` - Kubernetes helpers
+- `reload` - Reload all dotfiles without restarting shell
 - `tphelp` - Telepresence helpers
 - `tfhelp` - Terraform helpers
 - `wsl_help` - WSL integration helpers

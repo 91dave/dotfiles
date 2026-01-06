@@ -10,16 +10,44 @@ _repos_help() {
     echo "  repos ls           📍 List repos not on main/master or with uncommitted changes"
     echo "  repos main         🔄 Switch all repos to main/master branch"
     echo "  repos clear        🗑️  Delete branches merged into main/master"
-    echo "  repos code [repo]  🚀 Open VS Code in matching repo"
-    echo "  repos cmd [repo]   💻 Open CMD window in matching repo"
+    echo "  repos code <repo>  🚀 Open VS Code in matching repo"
+    echo "  repos cmd <repo>   💻 Open CMD window in matching repo"
     echo "  repos cache        📂 Update cache of repos"
     echo "  repos help         📖 Show this help message"
+}
+
+# Check if a repo matches any pattern in .reposignore
+# Pattern syntax:
+#   pattern    - substring match (e.g., '.bak' matches 'foo.bak/bar')
+#   =pattern   - exact basename match (e.g., '=eve' matches only repo named 'eve')
+_repos_match_ignore() {
+    local repo="$1"
+    local basename=$(basename "$repo")
+
+    [[ ! -f "$REPO_IGNORE" ]] && return 1
+
+    while IFS= read -r pattern || [[ -n "$pattern" ]]; do
+        # Skip empty lines and comments
+        [[ -z "$pattern" || "$pattern" =~ ^# ]] && continue
+
+        if [[ "$pattern" =~ ^= ]]; then
+            # Exact basename match (strip leading =)
+            local exact="${pattern#=}"
+            [[ "$basename" == "$exact" ]] && return 0
+        else
+            # Substring match
+            [[ "$repo" =~ $pattern ]] && return 0
+        fi
+    done < "$REPO_IGNORE"
+
+    return 1
 }
 
 # Check if a repo line from cache should be skipped
 _repos_should_skip() {
     local repo="$1"
-    [[ -z "$repo" || "$repo" =~ ^# || "$repo" =~ '\.bak' || "$repo" =~ "_backup" ]]
+    [[ -z "$repo" || "$repo" =~ ^# ]] && return 0
+    _repos_match_ignore "$repo"
 }
 
 # Find a repo by search term, returns path if exactly one match
@@ -49,7 +77,14 @@ _repos_find() {
 
 _repos_cache() {
     echo "🔍 Scanning for repos in $REPO_HOME..."
-    find_git_repos "$REPO_HOME" 4 | grep -v _backup | grep -v '\.bak' > "$REPO_CACHE"
+
+    # Filter repos through ignore patterns
+    local tmpfile=$(mktemp)
+    while IFS= read -r repo; do
+        _repos_match_ignore "$repo" || echo "$repo"
+    done < <(find_git_repos "$REPO_HOME" 4) > "$tmpfile"
+    mv "$tmpfile" "$REPO_CACHE"
+
     local count=$(wc -l < "$REPO_CACHE")
     echo "✅ Found $count repos, cache updated"
 }
@@ -183,6 +218,7 @@ _repos_status() {
     echo ""
     local -a off_main=()
     local -a dirty=()
+    local -a has_merged=()
 
     while read -r repo; do
         _repos_should_skip "$repo" && continue
@@ -217,6 +253,13 @@ _repos_status() {
             dirty+=("📁 $repo_name ($current_branch, $file_count file(s))")
         fi
 
+        # Check for merged branches that can be cleared
+        local merged=$(git.exe </dev/null branch --merged "$default_branch" 2>/dev/null | grep -v -E '^\*|^\s*(main|master)\s*$' | sed 's/^[ \t]*//')
+        if [[ -n "$merged" ]]; then
+            local merged_count=$(echo "$merged" | wc -l | tr -d ' ')
+            has_merged+=("📁 $repo_name ($merged_count branch(es))")
+        fi
+
         popd >& /dev/null
     done < "$REPO_CACHE"
 
@@ -236,7 +279,15 @@ _repos_status() {
         echo ""
     fi
 
-    if [[ ${#off_main[@]} -eq 0 ]] && [[ ${#dirty[@]} -eq 0 ]]; then
+    if [[ ${#has_merged[@]} -gt 0 ]]; then
+        echo "🧹 Merged branches to clear (${#has_merged[@]}):"
+        printf '%s\n' "${has_merged[@]}" | sort | while read -r item; do
+            echo "   $item"
+        done
+        echo ""
+    fi
+
+    if [[ ${#off_main[@]} -eq 0 ]] && [[ ${#dirty[@]} -eq 0 ]] && [[ ${#has_merged[@]} -eq 0 ]]; then
         echo "✅ All repos are clean and on main"
     fi
 }
@@ -384,3 +435,28 @@ repos() {
 }
 
 alias repo='repos'
+
+# fzf completion for repos command
+_fzf_complete_repos() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local cmd="${COMP_WORDS[1]:-}"
+
+    # First arg: complete subcommands
+    if [[ $COMP_CWORD -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "fetch ls main clear code cmd cache help view" -- "$cur") )
+        return
+    fi
+
+    # Second arg after repo-selecting commands: use fzf to pick a repo
+    case "$cmd" in
+        code|cmd|edit|view)
+            local selected
+            selected=$(fzf --height=70% --layout=reverse --preview "$EZA_PREVIEW $REPO_HOME/{}" < "$REPO_CACHE")
+            if [[ -n "$selected" ]]; then
+                COMPREPLY=( "$selected" )
+            fi
+            printf '\e[5n'
+            ;;
+    esac
+}
+complete -F _fzf_complete_repos -o default -o bashdefault repos repo

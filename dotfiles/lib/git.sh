@@ -7,6 +7,7 @@ export WORKTREE_HOME_WIN='C:\Code\workspace'
 ## Variables
 export REPO_HOME=$(wslpath $REPO_HOME_WIN)
 export REPO_CACHE=$REPO_HOME/repos-cache.lst
+export REPO_IGNORE=$REPO_HOME/.reposignore
 export WORKTREE_HOME=$(wslpath $WORKTREE_HOME_WIN)
 
 ## Shared Helpers

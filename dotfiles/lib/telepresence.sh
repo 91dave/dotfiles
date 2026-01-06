@@ -3,11 +3,11 @@
 tphelp() {
     echo "🔌 Telepresence Helpers"
     echo ""
-    echo "  tpc [namespace]           🔗 Connect to namespace"
+    echo "  tpc <namespace>           🔗 Connect to namespace"
     echo "  tps                       📊 Connection status"
     echo "  tpl                       📋 List active intercepts"
-    echo "  tpi [component] [port]    🎯 Intercept traffic"
-    echo "  tpii [component] [port]   🎯 Intercept (auto-quit on Enter)"
+    echo "  tpi <component> <port>    🎯 Intercept traffic"
+    echo "  tpii <component> <port>   🎯 Intercept (auto-quit on Enter)"
     echo "  tpq                       👋 Quit telepresence"
 }
 

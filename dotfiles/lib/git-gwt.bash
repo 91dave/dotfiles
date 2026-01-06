@@ -9,20 +9,22 @@ _gwt_help() {
     echo ""
     echo "🌐 Global commands:"
     echo "  gwt ls                        📋 List all worktrees in workspace"
-    echo "  gwt add [repo] [branch]       ➕ Find repo and create worktree (repo name as folder)"
-    echo "  gwt add [repo] -b [branch]    ➕ Find repo and create worktree (repo-branch as folder)"
-    echo "  gwt rm [repo]                 ➖ Find repo and delete tagless worktree"
-    echo "  gwt rm [repo] [branch]        ➖ Find repo and delete tagged worktree"
+    echo "  gwt add <repo> <branch>       ➕ Find repo and create worktree (repo name as folder)"
+    echo "  gwt add <repo> -b <branch>    ➕ Find repo and create worktree (repo-branch as folder)"
+    echo "  gwt edit <repo> [branch]      🚀 Open worktree in VS Code (create branch if given)"
+    echo "  gwt rm <repo>                 ➖ Find repo and delete default worktree"
+    echo "  gwt rm <repo> [branch]        ➖ Find repo and delete tagged worktree"
     echo "  gwt clear                     🗑️  Remove all worktrees"
     echo ""
     echo "📍 Repo-scoped commands: (must be run from a repository folder)"
     echo "  gwt                        📋 List worktrees in current repo"
-    echo "  gwt add [branch]           ➕ Create worktree (uses repo name as folder)"
-    echo "  gwt add -b [branch]        ➕ Create worktree (uses repo-branch as folder)"
-    echo "  gwt rm                     ➖ Delete tagless worktree for this repo"
+    echo "  gwt add <branch>           ➕ Create worktree (uses repo name as folder)"
+    echo "  gwt add -b <branch>        ➕ Create worktree (uses repo-branch as folder)"
+    echo "  gwt edit [branch]          🚀 Open worktree in VS Code (create branch if given)"
+    echo "  gwt rm                     ➖ Delete default worktree for this repo"
     echo "  gwt rm [branch]            ➖ Delete worktree named repo-branch"
     echo ""
-    echo "💡 Use 'code' instead of 'add' to open 🚀 VS Code when complete"
+    echo "💡 Use 'code' as a synonym for 'edit'"
     echo "💡 Use 'claude' instead of 'add' to open 🤖 Claude Code when complete"
     echo ""
     echo "🎮 Related commands"
@@ -117,7 +119,7 @@ _gwt_execute() {
     [ -n "$short" ] && project=$short
 
     # Get branch and tag (i.e. last component of branch name)
-    # Handle empty branch case (for tagless rm)
+    # Handle empty branch case (for default rm)
     local tag folder branch_exists
     if [ -z "$branch" ]; then
         tag=""
@@ -128,11 +130,10 @@ _gwt_execute() {
         branch_exists=true
         [ "$(git.exe branch | grep $branch | wc -l)" = "0" ] && branch_exists=false
 
-        # Determine folder name based on flags and existing folders
+        # Determine folder name based on flags and existing worktrees
         if [ "$use_tag_format" = "true" ]; then
             folder=$project-$tag
-        elif [ -d "$WORKTREE_HOME/$project" ]; then
-            echo "📁 Folder '$project' exists, using '$project-$tag' instead"
+        elif [ -f "$WORKTREE_HOME/$project-$tag/.git" ]; then
             folder=$project-$tag
         else
             folder=$project
@@ -144,9 +145,17 @@ _gwt_execute() {
     local worktree_exists=false
     if [ -d "$WORKTREE_HOME/$folder" ]; then
         folder_exists=true
-        local wtc=$(git.exe worktree list | grep $folder | wc -l)
-        [ "$wtc" = 0 ] || worktree_exists=true
+        local wtc=$(git.exe worktree list | grep $branch | wc -l)
+        if [ "$wtc" = 0 ]; then
+            worktree_exists=false
+            folder=$project-$tag
+            [ -d "$WORKTREE_HOME/$folder" ] || folder_exists=false
+        else
+            worktree_exists=true
+        fi
     fi
+
+    #echo -e "  folder_exists=$folder_exists\n  worktree_exists=$worktree_exists\n  folder=$folder"
 
     # Validate folder and worktree match
     [ "$worktree_exists" = "false" ] && [ "$folder_exists" = "true" ] && echo "⚠️  Folder '$folder' exists in workspace, but is not a valid worktree"
@@ -160,43 +169,62 @@ _gwt_execute() {
                 echo "⏭️  Worktree ${folder} does not exist, skipping..."
             fi
             ;;
-        add|claude|code)
-            # Check if main repo is currently on this branch
-            local current_branch=$(git.exe branch --show-current)
-            if [ "$current_branch" = "$branch" ]; then
-                # Check if working tree is clean
-                local is_dirty=$(git.exe status --porcelain)
-                if [ -n "$is_dirty" ]; then
-                    echo "❌ Cannot create worktree for branch '$branch' - it is currently checked out with uncommitted changes."
-                    echo "   Hint: Commit or stash your changes first, then try again."
+        add|claude|code|edit)
+            # For code/edit without branch, just open existing default worktree
+            if [ -z "$branch" ] && [[ "$cmd" =~ ^(code|edit)$ ]]; then
+                if [ "$worktree_exists" = "true" ]; then
+                    : # Will open via post-command action
+                else
+                    echo "❌ No default worktree found for $project"
+                    echo "   Hint: Create one first with 'gwt add <branch>'"
                     return 1
                 fi
-
-                # Find default branch (try main, then master)
-                local default_branch=$(_git_get_default_branch)
-                if [ -z "$default_branch" ]; then
-                    echo "❌ Cannot auto-switch: no 'main' or 'master' branch found."
-                    return 1
-                fi
-
-                echo "🔄 Switching main worktree from '$branch' to '$default_branch'..."
-                git.exe checkout "$default_branch"
-            fi
-
-            local branch_flag="-b"
-            [ "$branch_exists" = "true" ] && branch_flag=""
-
-            if [ "$worktree_exists" = "true" ]; then
-                echo "⏭️  Worktree ${folder} already exists, skipping..."
             else
-                echo "➕ Creating worktree ${folder}..."
-                git.exe worktree add "$(wslpath -w $WORKTREE_HOME/$folder)" $branch_flag $branch
+                # Check if main repo is currently on this branch
+                local current_branch=$(git.exe branch --show-current)
+                if [ "$current_branch" = "$branch" ]; then
+                    # Check if working tree is clean
+                    local is_dirty=$(git.exe status --porcelain)
+                    if [ -n "$is_dirty" ]; then
+                        echo "❌ Cannot create worktree for branch '$branch' - it is currently checked out with uncommitted changes."
+                        echo "   Hint: Commit or stash your changes first, then try again."
+                        return 1
+                    fi
+
+                    # Find default branch (try main, then master)
+                    local default_branch=$(_git_get_default_branch)
+                    if [ -z "$default_branch" ]; then
+                        echo "❌ Cannot auto-switch: no 'main' or 'master' branch found."
+                        return 1
+                    fi
+
+                    echo "🔄 Switching main worktree from '$branch' to '$default_branch'..."
+                    git.exe checkout "$default_branch"
+                fi
+
+                # Fetch and pull latest before creating worktree
+                echo "🔄 Fetching latest..."
+                git.exe fetch
+                if [ -z "$(git.exe status --porcelain)" ]; then
+                    echo "🔄 Pulling..."
+                    git.exe pull
+                fi
+
+                local branch_flag="-b"
+                [ "$branch_exists" = "true" ] && branch_flag=""
+
+                if [ "$worktree_exists" = "true" ]; then
+                    echo "⏭️  Worktree ${folder} already exists, skipping..."
+                else
+                    echo "➕ Creating worktree ${folder}..."
+                    git.exe worktree add "$(wslpath -w $WORKTREE_HOME/$folder)" $branch_flag $branch
+                fi
             fi
             ;;
     esac
 
     # Post-command actions
-    [ "$cmd" = "code" ] && echo "🚀 Opening VS Code..." && (cd $WORKTREE_HOME/$folder && cmd.exe /c code .)
+    [[ "$cmd" =~ ^(code|edit)$ ]] && echo "🚀 Opening VS Code..." && (cd $WORKTREE_HOME/$folder && cmd.exe /c code .)
     [ "$cmd" = "claude" ] && echo "🤖 Opening Claude Code..." && (cd $WORKTREE_HOME/$folder && cmd.exe /c claude)
 }
 
@@ -210,9 +238,9 @@ _gwt_dispatch() {
 
     # Validate arguments based on context and command
     if [ -z "$arg2" ]; then
-        # No second arg - only valid for 'rm' from within a repo
-        if [ "$(is_repo)" = "true" ] && [ "$cmd" = "rm" ]; then
-            : # OK - tagless rm from repo context
+        # No second arg - valid for 'rm' or 'code/edit' from within a repo
+        if [ "$(is_repo)" = "true" ] && [[ "$cmd" =~ ^(rm|code|edit)$ ]]; then
+            : # OK - operation on default worktree from repo context
         else
             _gwt_help && return
         fi
@@ -230,11 +258,11 @@ _gwt_dispatch() {
             branch="$arg4"
         fi
 
-        [ -z "$search" ] && _gwt_help && return
+        [ -z "$search" ] && echo "Error: current contxt is global. cmd=$cmd search=$search branch=$branch"  && _gwt_help && return
 
-        # For add/code/claude, branch is required
-        # For rm, branch is optional (tagless removal)
-        if [ -z "$branch" ] && [ "$cmd" != "rm" ]; then
+        # For add/claude, branch is required
+        # For rm/code/edit, branch is optional (default worktree operation)
+        if [ -z "$branch" ] && [[ "$cmd" =~ ^(add|claude)$ ]]; then
             _gwt_help && return
         fi
 
@@ -288,7 +316,7 @@ gwt() {
         clear)
             _gwt_clear
             ;;
-        code)
+        code|edit)
             # code command without other args just spawns VS code in WORKTREE_HOME
             if [ "$#" = "1" ]; then
                 _gwt_code_home
@@ -304,3 +332,36 @@ gwt() {
             ;;
     esac
 }
+
+# fzf completion for gwt command
+_fzf_complete_gwt() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local cmd="${COMP_WORDS[1]:-}"
+
+    # First arg: complete subcommands
+    if [[ $COMP_CWORD -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "ls add rm clear code edit claude help" -- "$cur") )
+        return
+    fi
+
+    local selected
+
+    # Second arg: context-dependent completion
+    case "$cmd" in
+        rm)
+            # Show existing worktrees
+            selected=$(ls -1d "$WORKTREE_HOME"/*/ 2>/dev/null | xargs -n1 basename | \
+                fzf --height=70% --layout=reverse --preview "$EZA_PREVIEW $WORKTREE_HOME/{}")
+            ;;
+        add|code|edit|claude)
+            # Show repos from cache
+            selected=$(fzf --height=70% --layout=reverse --preview "$EZA_PREVIEW $REPO_HOME/{}" < "$REPO_CACHE")
+            ;;
+    esac
+
+    if [[ -n "$selected" ]]; then
+        COMPREPLY=( "$selected" )
+    fi
+    printf '\e[5n'
+}
+complete -F _fzf_complete_gwt -o default -o bashdefault gwt

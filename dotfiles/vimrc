@@ -1,4 +1,3 @@
-colorscheme torte
 syntax on
 map t :tabedit 
 set autoindent
@@ -11,3 +10,11 @@ set shiftwidth=4
 set tabstop=4
 set vb
 map <C-p> :vert term<CR><C-w>r
+
+" Set colourscheme and override background (setting it to transparent)
+colorscheme torte
+highlight Normal guibg=NONE ctermbg=NONE
+highlight NonText ctermbg=NONE
+highlight EndOfBuffer ctermbg=NONE
+highlight SignColumn ctermbg=NONE
+

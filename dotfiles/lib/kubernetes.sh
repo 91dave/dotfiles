@@ -26,35 +26,38 @@ function khelp {
     echo "☸️  Kubernetes Helpers"
     echo ""
     echo "🔄 Context switching:"
-    echo "  use-[cluster]             Switch to [cluster] context"
+    echo "  use-<cluster>             Switch to <cluster> context"
     echo ""
     echo "📋 Listing:"
     echo "  kgns                      List namespaces"
-    echo "  kgs [ns]                  List services"
-    echo "  kgp [ns] [app?]           List pods (optionally filter by app)"
+    echo "  kgs <ns>                  List services"
+    echo "  kgp <ns> [app]            List pods (optionally filter by app)"
     echo "  kgn                       List nodes"
-    echo "  kgo [ns]                  List non-ready/terminating pods"
-    echo "  kg [ns] [resource]        Get any resource"
+    echo "  kgo <ns>                  List non-ready/terminating pods"
+    echo "  kg <ns> <resource>        Get any resource"
     echo ""
     echo "🔍 Details:"
-    echo "  kdp [ns] [pod]            Describe pod"
-    echo "  kdn [node]                Describe node"
-    echo "  kd [ns] [resource]        Describe any resource"
-    echo "  kgl [ns] [pod]            Get pod logs"
-    echo "  kgr [ns] [svc]            Get rollout status"
+    echo "  kdp <ns> <pod>            Describe pod"
+    echo "  kdn <node>                Describe node"
+    echo "  kd <ns> <resource>        Describe any resource"
+    echo "  kgl <ns> <pod>            Get pod logs"
+    echo "  kgr <ns> <svc>            Get rollout status"
     echo ""
     echo "⚡ Actions:"
-    echo "  kgx [ns] [pod] [cmd]      Execute command in pod"
-    echo "  kgxx [ns] [pod]           Exec interactive shell"
-    echo "  kkp [ns] [pod]            Kill pod"
-    echo "  kcp [ns] [app] [src] [dest]  Copy file to pods"
+    echo "  kgx <ns> <pod> <cmd>      Execute command in pod"
+    echo "  kgxx <ns> <pod>           Exec interactive shell"
+    echo "  kkp <ns> <pod>            Kill pod"
+    echo "  kcp <ns> <app> <src> <dest>  Copy file to pods"
+    echo ""
+    echo "🎯 Interactive:"
+    echo "  k8s [ns] [cmd]            Interactive pod manager (k8s help)"
     echo ""
     echo "📊 Stats:"
-    echo "  kppn [ns?]                Pods per node count"
+    echo "  kppn [ns]                 Pods per node count"
     echo "  kaudit                    Audit nodes and pods across clusters"
     echo ""
     echo "🎡 Helm:"
-    echo "  hls [ns]                  List helm releases"
+    echo "  hls <ns>                  List helm releases"
     echo "  hla                       List broken/pending releases"
 }
 alias kkp='kubectl delete pod -n'
@@ -200,4 +203,77 @@ function kaudit {
         kaudit_nodes $cluster
         kaudit_pods $cluster
     done
+}
+
+function k8s {
+    # Help
+    if [[ "$1" == "-h" || "$1" == "--help" || "$1" == "help" ]]; then
+        echo "☸️  Interactive Kubernetes Pod Manager"
+        echo ""
+        echo "Usage: k8s <ns> [cmd]"
+        echo ""
+        echo "📋 Modes:"
+        echo "  k8s                       Select namespace, then pod, then describe"
+        echo "  k8s <ns>                  Select pod in namespace, then describe"
+        echo "  k8s <ns> [cmd]            Select pod and run command"
+        echo ""
+        echo "⚡ Commands (defaults to describe):"
+        echo "  describe                  Describe pod"
+        echo "  logs                      View pod logs"
+        echo "  sh                        Shell into pod"
+        echo "  rm                        Delete pod"
+        echo ""
+        echo "⌨️  Keybindings:"
+        echo "  Ctrl + /                  Toggle pod details preview"
+        return
+    fi
+
+    ns=$1
+    cmd=$2
+
+    # If no namespace provided, select one via fzf
+    if [ -z "$ns" ]; then
+        # Original (fast, no pod counts):
+        # ns=$((echo "HELP: Use Ctrl + / to toggle pod list" ; kubectl get namespaces) | fzf --header-lines=2 --layout=reverse \
+        #     --preview-window=hidden \
+        #     --bind 'ctrl-/:toggle-preview' \
+        #     --preview "kubectl get pods -n {1}" \
+        #     | awk '{print $1}')
+
+        # With pod counts (adds ~1-2s latency):
+        ns=$((echo "HELP: Use Ctrl + / to toggle pod list" ; printf "%-40s %s\n" "NAME" "PODS"; join -a1 -e0 -o '1.1 2.2' \
+            <(kubectl get ns --no-headers | awk '{print $1}' | sort) \
+            <(kubectl get pods -A --no-headers | awk '{count[$1]++} END {for(ns in count) print ns, count[ns]}' | sort) \
+            | awk '{printf "%-40s %s\n", $1, $2}') \
+            | fzf --header-lines=2 --layout=reverse \
+            --preview-window=hidden \
+            --bind 'ctrl-/:toggle-preview' \
+            --preview "kubectl get pods -n {1}" \
+            | awk '{print $1}')
+
+        [ -z "$ns" ] && return
+        cmd="describe"
+    fi
+
+    # Select pod via fzf with preview (Ctrl-/ to toggle)
+    pod=$((echo "HELP: Use Ctrl + / to toggle pod details" ; kubectl get pods -n "$ns") | fzf --header-lines=2 --layout=reverse \
+        --preview-window=hidden \
+        --bind 'ctrl-/:toggle-preview' \
+        --preview "kubectl get pod {1} -n $ns -o wide && echo '' && \
+                   kubectl get pod {1} -n $ns -o jsonpath='{.spec.containers[*].image}' && echo -e '\n' && \
+                   echo '--- EVENTS ---' && \
+                   kubectl describe pod {1} -n $ns | grep -A 20 '^Events:' && \
+                   echo -e '\n--- LOGS (last 50) ---' && \
+                   kubectl logs --tail=50 {1} -n $ns 2>/dev/null" \
+        | awk '{print $1}')
+
+    # Exit if no selection
+    [ -z "$pod" ] && return
+
+    case "$cmd" in
+        logs)       kubectl logs -n "$ns" "$pod" ;;
+        sh)         kubectl exec -it -n "$ns" "$pod" -- sh ;;
+        rm)         kubectl delete pod -n "$ns" "$pod" ;;
+        *)          kubectl describe pod -n "$ns" "$pod" ;;
+    esac
 }

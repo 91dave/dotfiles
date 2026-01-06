@@ -65,6 +65,35 @@ ce fix
 **Auto-check on startup:**
 The container engine status is automatically checked when you start an interactive shell. If it's not running, you'll see a warning with instructions to fix it.
 
+### pod
+
+Interactive container manager with fzf integration.
+
+```bash
+pod [command]
+```
+
+**Commands:**
+- `logs` - View container logs (default action in preview)
+- `stop` - Stop the container
+- `attach` - Attach to the container
+- `rm` - Remove the container
+- `sh` - Shell into the container
+
+**Example:**
+```bash
+# Select a container and view logs
+pod logs
+
+# Select a container and shell into it
+pod sh
+
+# Select a container and stop it
+pod stop
+```
+
+The fzf preview shows live container logs while you browse.
+
 ### epoch
 
 Converts Unix timestamps to human-readable dates.

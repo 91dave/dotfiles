@@ -15,6 +15,39 @@ WORKTREE_HOME=$(wslpath $WORKTREE_HOME_WIN)
 
 # Repository cache file
 REPO_CACHE=$REPO_HOME/repos-cache.lst
+
+# Repository ignore file (optional)
+REPO_IGNORE=$REPO_HOME/.reposignore
+```
+
+### .reposignore
+
+Create a `.reposignore` file in your `REPO_HOME` directory to exclude repositories from the cache.
+
+**Pattern syntax:**
+```bash
+# Substring match - excludes any repo path containing the pattern
+.bak
+_backup
+archived/
+
+# Exact basename match - use = prefix
+=eve          # Only excludes repo named exactly "eve"
+=old-project  # Only excludes repo named exactly "old-project"
+
+# Comments start with #
+# Empty lines are ignored
+```
+
+**Example `.reposignore`:**
+```bash
+# Backup folders
+.bak
+_backup
+
+# Archived repos
+=legacy-api
+=deprecated-frontend
 ```
 
 ## Repository Management
@@ -87,7 +120,7 @@ repos cache
 # ✅ Found 23 repos, cache updated
 ```
 
-**Note:** The cache file excludes folders with `_backup` or `.bak` in the name.
+**Note:** The cache respects patterns in your `.reposignore` file. See [.reposignore](#reposignore) for configuration.
 
 #### repos fetch
 
@@ -136,6 +169,7 @@ repos status
 **Shows:**
 - Repos not on main/master branch
 - Repos with uncommitted changes
+- Repos with merged branches that can be cleared
 - Merge status indicators for branches (whether commits are merged into main)
 
 **Example output:**
@@ -148,6 +182,10 @@ repos status
 
 ✏️  Uncommitted changes (1):
    📁 work-in-progress (main, 3 file(s))
+
+🧹 Merged branches to clear (2):
+   📁 myapp (2 branch(es))
+   📁 old-project (1 branch(es))
 ```
 
 #### repos main
@@ -214,6 +252,20 @@ Displays help information for the repos command.
 
 ```bash
 repos help
+```
+
+### Tab Completion
+
+The `repos` command supports fzf-powered tab completion:
+
+```bash
+# Complete subcommands
+repos <TAB>
+# Shows: fetch, ls, main, clear, code, cmd, cache, help, view
+
+# Fuzzy-find repo for code/cmd/view commands
+repos code <TAB>
+# Opens fzf picker with directory preview to select a repo
 ```
 
 #### repos code
@@ -324,7 +376,7 @@ Shows all worktrees across all repositories in your workspace.
 
 #### Create worktree
 ```bash
-gwt add [branch]           # Tagless (uses repo name as folder)
+gwt add [branch]           # Default (uses repo name as folder)
 gwt add -b [branch]        # Tagged (uses repo-branch as folder)
 ```
 Creates a new worktree for the specified branch.
@@ -332,7 +384,10 @@ Creates a new worktree for the specified branch.
 **Folder naming:**
 - Without `-b`: Uses repo name only (e.g., `myapp`)
 - With `-b`: Uses repo-branch format (e.g., `myapp-new-feature`)
-- If folder exists, automatically uses tagged format
+- If a worktree already exists for that branch, automatically uses tagged format
+
+**Auto-fetch:**
+Before creating a worktree, the command automatically fetches and pulls latest changes from the remote.
 
 **Auto-switching:**
 If the main repo is currently on the branch you're creating a worktree for (with uncommitted changes), the command will fail and ask you to commit or stash first. If clean, it auto-switches the main repo to main/master.
@@ -357,7 +412,7 @@ gwt add myapp -b feature/another-feature
 
 #### Remove worktree
 ```bash
-gwt rm              # Remove tagless worktree (repo name folder)
+gwt rm              # Remove default worktree (repo name folder)
 gwt rm [branch]     # Remove tagged worktree (repo-branch folder)
 ```
 Deletes the specified worktree.
@@ -369,36 +424,34 @@ gwt rm                    # Removes /workspace/myapp
 gwt rm feature/old-feature  # Removes /workspace/myapp-old-feature
 
 # From anywhere (with repo search)
-gwt rm myapp             # Removes tagless worktree
+gwt rm myapp             # Removes default worktree
 gwt rm myapp old-feature # Removes tagged worktree
 ```
 
-#### Create and open in VS Code
+#### Open worktree in VS Code
 ```bash
-gwt code [branch]           # Tagless
-gwt code -b [branch]        # Tagged
+gwt edit [branch]          # Open existing or create new worktree
+gwt code [branch]          # Synonym for edit
 ```
-Creates a worktree and immediately opens it in VS Code.
+Opens a worktree in VS Code. If a branch is specified and no worktree exists, creates one first.
 
 **Example:**
 ```bash
+# Open existing default worktree
+gwt edit
+
+# Create worktree for branch and open in VS Code
+gwt edit feature/new-ui
+
+# Same as above (code is a synonym for edit)
 gwt code feature/new-ui
-# Creates worktree and runs: code /mnt/c/Code/workspace/myapp
-
-gwt code -b feature/new-ui
-# Creates worktree and runs: code /mnt/c/Code/workspace/myapp-new-ui
 ```
 
-**Special usage:**
-```bash
-gwt code
-# Opens VS Code in the workspace directory itself
-```
 
 #### Create and open in Claude Code
 ```bash
-gwt claude [branch]         # Tagless
-gwt claude -b [branch]      # Tagged
+gwt claude [branch]         # Default (uses repo name as folder)
+gwt claude -b [branch]      # Tagged (uses repo-branch as folder)
 ```
 Creates a worktree and immediately opens it in Claude Code.
 
@@ -440,7 +493,7 @@ gwt clear
 
 Worktrees can be named in two ways:
 
-### Tagless (default)
+### Default
 ```
 {project}
 ```
@@ -459,7 +512,7 @@ Uses repository name plus branch tag.
 - Repo: `myapp`, Branch: `feature/new-ui` → Worktree: `myapp-new-ui`
 - Repo: `company-myapp`, Branch: `hotfix/bug-123` → Worktree: `myapp-bug-123`
 
-**Note:** If a tagless folder already exists, the tagged format is used automatically.
+**Note:** If a worktree already exists for that branch, the tagged format is used automatically.
 
 Where:
 - `project` is the repository name (shortened if it contains hyphens)
@@ -520,6 +573,6 @@ gwt clear     # Remove all if needed
 3. **Repository Management**: Use `repos status` to check all repos, `repos main` to switch to main branches
 4. **Branch Cleanup**: Use `repos clear` to delete merged branches
 5. **Worktree Cleanup**: Periodically run `gwt ls` to review and `gwt clear` to clean up
-6. **Naming Strategy**: Use tagless worktrees for main work, tagged (-b) for multiple branches
+6. **Naming Strategy**: Use default worktrees for main work, tagged (-b) for multiple branches
 7. **Branch Search**: When using `gwt add [repo] [branch]`, only one matching repo should exist
 8. **Quick Access**: Use `gwt code` or `gwt claude` for immediate editor integration

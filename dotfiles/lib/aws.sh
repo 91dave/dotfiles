@@ -11,8 +11,8 @@ function aws_help() {
     echo "  aws_role_clear            Clear assumed role credentials"
     echo ""
     echo "🔍 Utilities:"
-    echo "  aws_secrets_json_validity [pattern]   Check JSON validity of secrets"
-    echo "  aws_ecr [region]          Login to ECR in specified region"
+    echo "  aws_secrets_json_validity <pattern>   Check JSON validity of secrets"
+    echo "  aws_ecr <region>          Login to ECR in specified region"
 }
 
 function aws_key_rotate() {
