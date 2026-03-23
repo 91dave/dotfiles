@@ -23,7 +23,7 @@ alias docker="podman.exe"
 alias docker-compose="podman.exe compose"
 alias dotnet="dotnet.exe"
 alias gh="gh.exe"
-alias claude="npx @anthropic-ai/claude-code"
+alias cc="cmd.exe /c claude"
 alias bat="batcat"  # Shorter alias for batcat
 ```
 
@@ -228,14 +228,16 @@ gh run list
 
 ### Claude Code
 
-Access Claude Code via npx:
+Access Claude Code via the `cc` alias:
 
 ```bash
 # Start Claude Code in current directory
-claude
+cc
 
-# Start in specific directory
-claude /path/to/project
+# Or use repos/gwt/gws integration
+repos claude myapp
+gwt claude feature/new-ui
+gws claude my-workspace
 ```
 
 ## Optional Helper Utilities

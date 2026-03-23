@@ -12,12 +12,16 @@ WORKTREE_HOME_WIN='C:\Code\workspace'
 # Converted WSL paths (automatically set)
 REPO_HOME=$(wslpath $REPO_HOME_WIN)
 WORKTREE_HOME=$(wslpath $WORKTREE_HOME_WIN)
+WORKSPACE_HOME=$(wslpath $WORKSPACE_HOME_WIN)
 
 # Repository cache file
 REPO_CACHE=$REPO_HOME/repos-cache.lst
 
 # Repository ignore file (optional)
 REPO_IGNORE=$REPO_HOME/.reposignore
+
+# Repository groups file (for gwt gadd)
+REPO_GROUPS=$REPO_HOME/repos-groups.cfg
 ```
 
 ### .reposignore
@@ -104,6 +108,14 @@ repo [subcommand]  # alias
 
 **Subcommands:**
 
+#### repos reset
+
+Runs fetch, clear, and status in sequence — a one-command daily refresh.
+
+```bash
+repos reset
+```
+
 #### repos cache
 
 Scans for repositories and updates the cache file.
@@ -170,7 +182,7 @@ repos status
 - Repos not on main/master branch
 - Repos with uncommitted changes
 - Repos with merged branches that can be cleared
-- Merge status indicators for branches (whether commits are merged into main)
+- Merge status indicators for branches (uses `git cherry` for accurate squash/rebase merge detection)
 
 **Example output:**
 ```
@@ -199,7 +211,7 @@ repos main
 **Safety features:**
 - Only switches repos not currently on main
 - Skips repos with uncommitted changes
-- Skips repos with unmerged commits
+- Skips repos with unmerged commits (detected via `git cherry`)
 - Shows summary of switched and skipped repos
 
 **Example output:**
@@ -222,15 +234,17 @@ repos main
 
 #### repos clear
 
-Deletes all branches that have been merged into main/master.
+Deletes all branches that have been merged into main/master. Uses `git cherry` to detect merges, which correctly handles squash and rebase merges (not just fast-forward merges).
 
 ```bash
 repos clear
 ```
 
 **Safety features:**
-- Never deletes main, master, or current branch
-- Only deletes branches fully merged
+- Never deletes main or master branches
+- Only deletes branches fully merged (detected via `git cherry`)
+- If the current branch is merged, auto-switches to the default branch before deleting it
+- Skips repos with uncommitted changes when a branch switch is needed
 
 **Example output:**
 ```
@@ -261,9 +275,9 @@ The `repos` command supports fzf-powered tab completion:
 ```bash
 # Complete subcommands
 repos <TAB>
-# Shows: fetch, ls, main, clear, code, cmd, cache, help, view
+# Shows: fetch, ls, main, clear, code, cmd, cd, claude, cache, help, view
 
-# Fuzzy-find repo for code/cmd/view commands
+# Fuzzy-find repo for code/cmd/cd/claude/view commands
 repos code <TAB>
 # Opens fzf picker with directory preview to select a repo
 ```
@@ -287,7 +301,7 @@ repos code myapp
 
 #### repos cmd
 
-Opens a CMD window in a matching repository.
+Opens a WSL window in a matching repository.
 
 ```bash
 repos cmd [search]
@@ -299,7 +313,7 @@ repos cmd [search]
 **Example:**
 ```bash
 repos cmd myapp
-# Opens CMD in the matching repository
+# Opens WSL window in the matching repository
 ```
 
 #### repos view
@@ -327,6 +341,48 @@ repos view myapp
 - Quick access to GitHub Desktop for PR reviews
 - Viewing commit history and diffs visually
 - Managing branches through a GUI
+
+#### repos cd
+
+Changes directory (pushd) into a matching repository.
+
+```bash
+repos cd [search]
+```
+
+**Example:**
+```bash
+repos cd myapp
+# pushd into the matching repository
+```
+
+#### repos claude
+
+Opens Claude Code in a matching repository.
+
+```bash
+repos claude [search]
+```
+
+**Example:**
+```bash
+repos claude myapp
+# Opens Claude Code in the matching repository
+```
+
+#### repos work
+
+Opens both VS Code and GitHub Desktop for a matching repository.
+
+```bash
+repos work [search]
+```
+
+**Example:**
+```bash
+repos work myapp
+# Opens GitHub Desktop and VS Code for the matching repository
+```
 
 ## Git Worktree Management
 
@@ -359,11 +415,19 @@ gwt
 ```
 Shows all worktrees for the current repository.
 
+#### Change to worktree home directory
+```bash
+gwt cd
+```
+Changes directory to `$WORKTREE_HOME`.
+
 #### List all worktrees in workspace
 ```bash
 gwt ls
 ```
 Shows all worktrees across all repositories in your workspace.
+
+**Note:** Folders prefixed with `_` are excluded from listing.
 
 **Example output:**
 ```
@@ -488,6 +552,38 @@ gwt clear
 - Prompts for confirmation before removing
 - Only removes valid git worktrees
 - Skips non-worktree directories
+- Folders prefixed with `_` are excluded from clearing
+
+#### Group add worktrees
+```bash
+gwt gadd <group> <branch>        # Default folder naming
+gwt gadd <group> <branch> -b     # Tagged folder naming (repo-branch)
+```
+Creates worktrees for all repositories in a named group.
+
+**Example:**
+```bash
+gwt gadd platform feature/add-logging
+# Creates worktrees for every repo in the "platform" group
+
+gwt gadd platform feature/add-logging -b
+# Same, but uses repo-branch folder naming
+```
+
+### Repo Groups Configuration
+
+Groups are defined in `$REPO_GROUPS` (default: `$REPO_HOME/repos-groups.cfg`).
+
+**Format:**
+```
+group=repo1,repo2,repo3
+```
+
+**Example `repos-groups.cfg`:**
+```
+platform=api-gateway,auth-service,user-service
+frontend=web-app,admin-panel,shared-components
+```
 
 ## Worktree Naming Convention
 
@@ -576,3 +672,53 @@ gwt clear     # Remove all if needed
 6. **Naming Strategy**: Use default worktrees for main work, tagged (-b) for multiple branches
 7. **Branch Search**: When using `gwt add [repo] [branch]`, only one matching repo should exist
 8. **Quick Access**: Use `gwt code` or `gwt claude` for immediate editor integration
+9. **Daily Reset**: Use `repos reset` for a one-command fetch + clear + status
+10. **Group Worktrees**: Define repo groups in `repos-groups.cfg` and use `gwt gadd` to create worktrees for all repos in a group at once
+
+## Workspace Management
+
+Workspaces are standalone directories in `$WORKSPACE_HOME` (default: `C:\Code\workspaces`). Unlike worktrees (which are linked to a git repo's working tree), workspaces are independent folders — useful for multi-repo projects, monorepos, or custom setups.
+
+### gws
+
+Main command for managing workspaces.
+
+```bash
+gws [cmd] [workspace]
+```
+
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `gws cd <workspace>` | pushd into matching workspace |
+| `gws claude <workspace>` | Open Claude Code in matching workspace |
+| `gws edit <workspace>` | Open VS Code in matching workspace |
+| `gws code <workspace>` | Synonym for `edit` |
+| `gws cmd <workspace>` | Open WSL window in matching workspace |
+| `gws help` | Show help message |
+
+**Workspace matching:** Searches by partial name. Errors if zero or multiple matches are found.
+
+**Example:**
+```bash
+gws cd platform
+# pushd into the workspace matching "platform"
+
+gws claude my-project
+# Opens Claude Code in the matching workspace
+```
+
+### Tab Completion
+
+The `gws` command supports fzf-powered tab completion:
+
+```bash
+# Complete subcommands
+gws <TAB>
+# Shows: cd, claude, edit, code, cmd, help
+
+# Fuzzy-find workspace
+gws cd <TAB>
+# Opens fzf picker with directory preview
+```

@@ -8,6 +8,7 @@ Comprehensive documentation for all helper functions and aliases in `/dotfiles/l
 - [Kubernetes Helpers](kubernetes.md)
 - [Telepresence Helpers](telepresence.md)
 - [Terraform Helpers](terraform.md)
+- [Todo List](todo.md)
 - [WSL Integration Helpers](wsl.md)
 
 ## Common Workflows
@@ -17,17 +18,18 @@ Comprehensive documentation for all helper functions and aliases in `/dotfiles/l
 Use this workflow at the start of your day to get a quick overview of work in progress across all repositories and ensure you have the latest changes.
 
 ```bash
-# Fetch updates from all repositories
-repos fetch
+# One-command daily refresh: fetch + clear merged branches + status
+repos reset
 
-# View repositories with uncommitted changes or off main branch
-repos ls
+# Or run individual steps:
+repos fetch    # Fetch updates from all repositories
+repos ls       # View repos with uncommitted changes or off main branch
 
-# Open a specific repo in VS Code
-repos code my-repo
-
-# Open a specific repo in CMD window
-repos cmd my-repo
+# Open a specific repo
+repos code my-repo      # VS Code
+repos claude my-repo    # Claude Code
+repos cd my-repo        # pushd into the repo
+repos cmd my-repo       # WSL window
 ```
 
 ### Multi-Repo Feature Development
@@ -40,10 +42,26 @@ gwt add api-service feature/add-logging
 gwt add web-app feature/add-logging
 gwt add mobile-app feature/add-logging
 
+# Or use group add to create all at once (requires repos-groups.cfg)
+gwt gadd platform feature/add-logging
+
 # Open VS Code or Claude with context of all worktrees
 gwt code
 # or
 gwt claude
+```
+
+### Workspace Management
+
+Use workspaces for multi-repo projects or custom directory setups that aren't tied to a single git repo.
+
+```bash
+# Navigate to a workspace
+gws cd my-project
+
+# Open a workspace in Claude Code or VS Code
+gws claude my-project
+gws edit my-project
 ```
 
 ### Parallel Work in Same Repo

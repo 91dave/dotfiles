@@ -47,14 +47,18 @@ Comprehensive documentation for all helper functions and aliases is available in
 - `aws_help` - AWS helpers
 - `ce <cmd>` - Container engine manager (check/fix/help)
 - `dev_help` - Development helpers
+- `gws <cmd>` - Workspace manager (cd/claude/edit/cmd)
 - `khelp` - Kubernetes helpers
 - `reload` - Reload all dotfiles without restarting shell
+- `repos reset` - Daily refresh (fetch + clear + status)
+- `todo <cmd>` - Simple todo list (add/done/rm/ls)
 - `tphelp` - Telepresence helpers
 - `tfhelp` - Terraform helpers
 - `wsl_help` - WSL integration helpers
 - `wslexe <cmd>` - WSL interop manager (get/check/fix)
 
 **Configuration variables:**
+- `BASH_DEBUG` - Set to enable debug output during shell loading
 - `SHOW_DAILY_TIPS=true` - Show daily tips on shell startup (default: true)
 - `WARN_MISSING_HELPERS=true` - Warn about missing helper utilities (default: true)
 
