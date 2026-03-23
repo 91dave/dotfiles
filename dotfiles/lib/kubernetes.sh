@@ -1,5 +1,7 @@
 #!/bin/bash
 
+bash_debug "Loading kubernetes.sh"
+
 ## CONFIGURATION
 # Kubernetes cluster nicknames
 PREF_k8s_clusters="dev test prod"
@@ -277,3 +279,4 @@ function k8s {
         *)          kubectl describe pod -n "$ns" "$pod" ;;
     esac
 }
+

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+bash_debug "Loading telepresence.sh"
+
 tphelp() {
     echo "🔌 Telepresence Helpers"
     echo ""
@@ -58,3 +60,4 @@ tpq() {
 
 alias tps="telepresence.exe status"
 alias tpl="telepresence.exe list"
+

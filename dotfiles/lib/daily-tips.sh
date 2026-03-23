@@ -1,5 +1,7 @@
 #!/bin/bash
 
+bash_debug "Loading daily-tips.sh"
+
 ## Daily tips - shown once per day on shell startup
 SHOW_DAILY_TIPS=true
 
@@ -40,18 +42,18 @@ _show_daily_tips() {
     echo "├──────────────────────────────────────────────────────────────────────────────┤"
     echo "│  🐳 Dev (dev_help) & 🔌 Telepresence (tphelp)                                │"
     echo "│     k8s [ns] [cmd]           Interactive pod manager (k8s help)              │"
-    echo "│     ce check                 Check container engine status                   │"
-    echo "│     wslexe check             Check WSL interop status                        │"
     echo "│     epoch [ts]               Convert timestamp to date                       │"
     echo "│     tpc <ns>                 Connect to namespace                            │"
     echo "│     tpi <component> <port>   Intercept traffic                               │"
     echo "├──────────────────────────────────────────────────────────────────────────────┤"
-    echo "│  ☸️ Kubernetes (khelp)                                                       │"
-    echo "│  ☁️ AWS (aws_help)                                                           │"
-    echo "│  🏗️ Terraform (tfhelp)                                                       │"
+    echo "│  💻 Other providers                                                          │"
+    echo "│     Kubernetes (khelp)                                                       │"
+    echo "│     AWS (aws_help)                                                           │"
+    echo "│     Terraform (tfhelp)                                                       │"
     echo "└──────────────────────────────────────────────────────────────────────────────┘"
     echo ""
 }
 
 # Show tips on shell startup (only for interactive shells)
 [[ $- == *i* ]] && [ "$SHOW_DAILY_TIPS" == "true"  ]  &&_show_daily_tips
+

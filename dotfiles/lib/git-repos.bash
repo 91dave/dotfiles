@@ -11,8 +11,12 @@ _repos_help() {
     echo "  repos main         🔄 Switch all repos to main/master branch"
     echo "  repos clear        🗑️  Delete branches merged into main/master"
     echo "  repos code <repo>  🚀 Open VS Code in matching repo"
-    echo "  repos cmd <repo>   💻 Open CMD window in matching repo"
-    echo "  repos cache        📂 Update cache of repos"
+    echo "  repos cmd <repo>   💻 Open WSL window in matching repo"
+    echo "  repos cd <repo>    📂 pushd into matching repo"
+    echo "  repos claude <repo> 🤖 Open Claude Code in matching repo"
+    echo "  repos view <repo>  📂 Open GitHub desktop in matching repo"
+    echo "  repos work <repo>  📚 Open VS Code and GitHub desktop in matching repo"
+    echo "  repos cache        📦 Update cache of repos"
     echo "  repos help         📖 Show this help message"
 }
 
@@ -90,6 +94,9 @@ _repos_cache() {
 }
 
 _repos_fetch() {
+    echo "🔄 Fetching repos..."
+    echo ""
+
     local -a skipped_dirty=()
     local -a skipped_branch=()
 
@@ -98,6 +105,8 @@ _repos_fetch() {
 
         local repo_path="$REPO_HOME/$repo"
         [[ ! -d "$repo_path/.git" ]] && continue
+
+        printf '\r\e[K⏳ Processing %s...' "$repo"
 
         pushd "$repo_path" >& /dev/null
 
@@ -120,7 +129,8 @@ _repos_fetch() {
             continue
         fi
 
-        echo "🔄 $repo"
+        printf '\r\e[K'
+        echo "📁 $repo"
         echo "   📥 $commits new commit(s)"
 
         # Check if we can pull
@@ -141,6 +151,8 @@ _repos_fetch() {
 
         popd >& /dev/null
     done < "$REPO_CACHE"
+
+    printf '\r\e[K'
 
     # Print summary of skipped repos grouped by reason
     local total_skipped=$(( ${#skipped_dirty[@]} + ${#skipped_branch[@]} ))
@@ -178,6 +190,8 @@ _repos_clear() {
         local repo_path="$REPO_HOME/$repo"
         [[ ! -d "$repo_path/.git" ]] && continue
 
+        printf '\r\e[K⏳ Processing %s...' "$repo"
+
         pushd "$repo_path" >& /dev/null
 
         local default_branch=$(_git_get_default_branch)
@@ -186,26 +200,67 @@ _repos_clear() {
             continue
         fi
 
-        # Get merged branches (exclude default, master, main, and current)
-        local merged=$(git.exe </dev/null branch --merged "$default_branch" 2>/dev/null | grep -v -E '^\*|^\s*(main|master)\s*$' | sed 's/^[ \t]*//')
+        local current_branch=$(git.exe </dev/null branch --show-current 2>/dev/null)
+        local repo_printed=false
 
-        if [[ -n "$merged" ]]; then
-            echo "📁 $repo"
-            while IFS= read -r branch; do
-                [[ -z "$branch" ]] && continue
-                if git.exe </dev/null branch -d "$branch" >& /dev/null; then
+        # Check if current branch is merged and switch to default if so
+        if [[ "$current_branch" != "$default_branch" ]]; then
+            local cherry=$(git.exe </dev/null cherry "origin/$default_branch" HEAD 2>/dev/null)
+            local has_unmerged=$(echo "$cherry" | grep -c '^+' || true)
+
+            if [[ "$has_unmerged" -eq 0 ]]; then
+                # Current branch is merged - check for uncommitted changes
+                local is_dirty=$(git.exe </dev/null status --porcelain 2>/dev/null)
+                if [[ -z "$is_dirty" ]]; then
+                    # Safe to switch and delete
+                    if git.exe </dev/null checkout "$default_branch" >& /dev/null; then
+                        printf '\r\e[K'
+                        echo "📁 $repo"
+                        repo_printed=true
+                        echo "   🔄 Switched: $current_branch → $default_branch"
+                        if git.exe </dev/null branch -D "$current_branch" >& /dev/null; then
+                            echo "   ✅ Deleted: $current_branch"
+                            ((total_branches++))
+                            git.exe </dev/null pull >& /dev/null
+                        else
+                            echo "   ❌ Failed to delete: $current_branch"
+                        fi
+                    fi
+                fi
+            fi
+        fi
+
+        # Get all local branches except default, master, main, and current
+        local branches=$(git.exe </dev/null branch 2>/dev/null | grep -v -E '^\*|^\s*(main|master)\s*$' | sed 's/^[ \t]*//')
+
+        while IFS= read -r branch; do
+            [[ -z "$branch" ]] && continue
+
+            # Use git cherry to detect merged branches (handles squash/rebase merges)
+            # If all lines start with '-' or output is empty, branch is fully merged
+            local cherry=$(git.exe </dev/null cherry "origin/$default_branch" "$branch" 2>/dev/null)
+            local has_unmerged=$(echo "$cherry" | grep -c '^+' || true)
+
+            if [[ "$has_unmerged" -eq 0 ]]; then
+                if [[ "$repo_printed" == false ]]; then
+                    printf '\r\e[K'
+                    echo "📁 $repo"
+                    repo_printed=true
+                fi
+                if git.exe </dev/null branch -D "$branch" >& /dev/null; then
                     echo "   ✅ Deleted: $branch"
                     ((total_branches++))
                 else
                     echo "   ❌ Failed: $branch"
                 fi
-            done <<< "$merged"
-        fi
+            fi
+        done <<< "$branches"
 
         popd >& /dev/null
     done < "$REPO_CACHE"
 
-    echo ""
+    printf '\r\e[K'
+
     if [[ $total_branches -gt 0 ]]; then
         echo "✅ Deleted $total_branches branch(es)"
     else
@@ -226,7 +281,10 @@ _repos_status() {
         local repo_path="$REPO_HOME/$repo"
         [[ ! -d "$repo_path/.git" ]] && continue
 
+        printf '\r\e[K⏳ Processing %s...' "$repo"
+
         pushd "$repo_path" >& /dev/null
+        [ -f "bash.exe.stackdump" ] && rm bash.exe.stackdump
 
         local default_branch=$(_git_get_default_branch)
         if [[ -z "$default_branch" ]]; then
@@ -239,8 +297,9 @@ _repos_status() {
         local repo_name=$(basename "$repo")
 
         if [[ "$current_branch" != "$default_branch" ]]; then
-            # Check if branch has unmerged commits
-            local unmerged=$(git.exe </dev/null rev-list --count "$default_branch..HEAD" 2>/dev/null || echo "0")
+            # Check if branch has unmerged commits (using git cherry for squash/rebase detection)
+            local cherry=$(git.exe </dev/null cherry "origin/$default_branch" HEAD 2>/dev/null)
+            local unmerged=$(echo "$cherry" | grep -c '^+' || true)
             if [[ "$unmerged" -eq 0 ]]; then
                 off_main+=("📁 $repo_name ($current_branch) ✅ merged")
             else
@@ -253,15 +312,23 @@ _repos_status() {
             dirty+=("📁 $repo_name ($current_branch, $file_count file(s))")
         fi
 
-        # Check for merged branches that can be cleared
-        local merged=$(git.exe </dev/null branch --merged "$default_branch" 2>/dev/null | grep -v -E '^\*|^\s*(main|master)\s*$' | sed 's/^[ \t]*//')
-        if [[ -n "$merged" ]]; then
-            local merged_count=$(echo "$merged" | wc -l | tr -d ' ')
+        # Check for merged branches that can be cleared (using git cherry for squash/rebase detection)
+        local branches=$(git.exe </dev/null branch 2>/dev/null | grep -v -E '^\*|^\s*(main|master)\s*$' | sed 's/^[ \t]*//')
+        local merged_count=0
+        while IFS= read -r branch; do
+            [[ -z "$branch" ]] && continue
+            local cherry=$(git.exe </dev/null cherry "origin/$default_branch" "$branch" 2>/dev/null)
+            local has_unmerged=$(echo "$cherry" | grep -c '^+' || true)
+            [[ "$has_unmerged" -eq 0 ]] && ((merged_count++))
+        done <<< "$branches"
+        if [[ $merged_count -gt 0 ]]; then
             has_merged+=("📁 $repo_name ($merged_count branch(es))")
         fi
 
         popd >& /dev/null
     done < "$REPO_CACHE"
+
+    printf '\r\e[K'
 
     if [[ ${#off_main[@]} -gt 0 ]]; then
         echo "🌿 Not on main (${#off_main[@]}):"
@@ -328,8 +395,9 @@ _repos_main() {
             continue
         fi
 
-        # Check for unmerged commits
-        local unmerged=$(git.exe </dev/null rev-list --count "$default_branch..HEAD" 2>/dev/null || echo "0")
+        # Check for unmerged commits (using git cherry for squash/rebase detection)
+        local cherry=$(git.exe </dev/null cherry "origin/$default_branch" HEAD 2>/dev/null)
+        local unmerged=$(echo "$cherry" | grep -c '^+' || true)
         if [[ "$unmerged" -gt 0 ]]; then
             skipped_unmerged+=("$repo ($current_branch, $unmerged commit(s))")
             popd >& /dev/null
@@ -392,14 +460,7 @@ _repos_view() {
     local repo=$(_repos_find "$search") || return 1
 
     local repo_path="$REPO_HOME/$repo"
-    #ghd=$(wslpath "$(cmd.exe /k "echo %localappdata%\\GitHubDesktop\\GitHubDesktop.exe & exit" 2>/dev/null)")
-    #if [ -f "$ghd" ]; then
-    #    :
-    #else
-    #    echo "❌ Error: can't find GitHubDesktop.exe: BIN=$ghd"
-    #    return 1
-    #fi
-    echo "📁 Opening in $repo in GitHub Desktop"
+    echo "📁 Opening $repo in GitHub Desktop"
     (cd "$repo_path" && cmd.exe /c github)
 }
 
@@ -410,7 +471,25 @@ _repos_cmd() {
     local repo_path="$REPO_HOME/$repo"
     local repo_path_win=$(wslpath -w "$repo_path")
     echo "💻 Opening CMD in $repo..."
-    (cd "$repo_path" && cmd.exe /c start cmd.exe)
+    (cd "$repo_path" && cmd.exe /c start wsl)
+}
+
+_repos_cd() {
+    local search="$1"
+    local repo=$(_repos_find "$search") || return 1
+
+    local repo_path="$REPO_HOME/$repo"
+    echo "📂 $repo"
+    pushd "$repo_path" > /dev/null
+}
+
+_repos_claude() {
+    local search="$1"
+    local repo=$(_repos_find "$search") || return 1
+
+    local repo_path="$REPO_HOME/$repo"
+    echo "🤖 Opening Claude Code in $repo..."
+    (cd "$repo_path" && cmd.exe /c claude)
 }
 
 repos() {
@@ -422,15 +501,19 @@ repos() {
     fi
 
     case "$cmd" in
-        view)      _repos_view "$2" ;;
-        fetch)     _repos_fetch ;;
-        cache)     _repos_cache ;;
-        clear)     _repos_clear ;;
-        status|ls) _repos_status ;;
-        main)      _repos_main ;;
+        view)           _repos_view "$2" ;;
+        work)           _repos_view "$2" ; _repos_edit "$2" ;;
+        fetch)          _repos_fetch ;;
+        reset)          _repos_fetch; echo ""; _repos_clear; echo ""; _repos_status ;;
+        cache)          _repos_cache ;;
+        clear)          _repos_clear ;;
+        status|ls)      _repos_status ;;
+        main)           _repos_main ;;
         edit|code)      _repos_edit "$2" ;;
-        cmd)       _repos_cmd "$2" ;;
-        *)         _repos_help ;;
+        cmd)            _repos_cmd "$2" ;;
+        cd)             _repos_cd "$2" ;;
+        claude)         _repos_claude "$2" ;;
+        *)              _repos_help ;;
     esac
 }
 
@@ -443,13 +526,13 @@ _fzf_complete_repos() {
 
     # First arg: complete subcommands
     if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "fetch ls main clear code cmd cache help view" -- "$cur") )
+        COMPREPLY=( $(compgen -W "fetch ls main clear code cmd cd claude cache help view" -- "$cur") )
         return
     fi
 
     # Second arg after repo-selecting commands: use fzf to pick a repo
     case "$cmd" in
-        code|cmd|edit|view)
+        code|cmd|cd|claude|edit|view)
             local selected
             selected=$(fzf --height=70% --layout=reverse --preview "$EZA_PREVIEW $REPO_HOME/{}" < "$REPO_CACHE")
             if [[ -n "$selected" ]]; then

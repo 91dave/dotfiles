@@ -8,9 +8,12 @@ _gwt_help() {
     echo "Update the repo cache by running: repos cache"
     echo ""
     echo "🌐 Global commands:"
+    echo "  gwt cd                        📂 Change directory to workspace"
     echo "  gwt ls                        📋 List all worktrees in workspace"
     echo "  gwt add <repo> <branch>       ➕ Find repo and create worktree (repo name as folder)"
     echo "  gwt add <repo> -b <branch>    ➕ Find repo and create worktree (repo-branch as folder)"
+    echo "  gwt gadd <group> <branch>     ➕ Add worktrees for all repos in a group"
+    echo "  gwt gadd <group> <branch> -b  ➕ Add worktrees for group (repo-branch as folder)"
     echo "  gwt edit <repo> [branch]      🚀 Open worktree in VS Code (create branch if given)"
     echo "  gwt rm <repo>                 ➖ Find repo and delete default worktree"
     echo "  gwt rm <repo> [branch]        ➖ Find repo and delete tagged worktree"
@@ -27,6 +30,9 @@ _gwt_help() {
     echo "💡 Use 'code' as a synonym for 'edit'"
     echo "💡 Use 'claude' instead of 'add' to open 🤖 Claude Code when complete"
     echo ""
+    echo "📋 Groups configuration: $REPO_GROUPS"
+    echo "   Format: group=repo1,repo2,repo3"
+    echo ""
     echo "🎮 Related commands"
     echo "  repos                      📦 Manage all repos (fetch, status, main, ls, clear, cache)"
 }
@@ -37,6 +43,7 @@ _gwt_ls() {
     for wt in "$WORKTREE_HOME"/*/; do
         [ -d "$wt" ] || continue
         wt_name=$(basename "$wt")
+        [[ "$wt_name" == _* ]] && continue
         pushd "$wt" >& /dev/null || continue
 
         main_worktree=$(git.exe worktree list 2>/dev/null | head -n1 | awk '{print $1}')
@@ -56,7 +63,7 @@ _gwt_ls() {
 }
 
 _gwt_clear() {
-    local count=$(find "$WORKTREE_HOME" -maxdepth 1 -mindepth 1 -type d ! -name '.*' 2>/dev/null | wc -l)
+    local count=$(find "$WORKTREE_HOME" -maxdepth 1 -mindepth 1 -type d ! -name '.*' ! -name '_*' 2>/dev/null | wc -l)
 
     if [ "$count" -eq 0 ]; then
         echo "📭 No worktrees found in $WORKTREE_HOME"
@@ -64,7 +71,7 @@ _gwt_clear() {
     fi
 
     echo "🗑️  Found $count folder(s) in $WORKTREE_HOME:"
-    ls -1d "$WORKTREE_HOME"/*/ 2>/dev/null | xargs -n1 basename
+    ls -1d "$WORKTREE_HOME"/*/ 2>/dev/null | xargs -n1 basename | grep -v '^_'
     echo ""
     read -p "Remove all worktrees? [y/N] " confirm
 
@@ -77,6 +84,7 @@ _gwt_clear() {
         [ -d "$folder" ] || continue
 
         folder_name=$(basename "$folder")
+        [[ "$folder_name" == _* ]] && continue
         echo "🔄 Processing: $folder_name"
 
         pushd "$folder" >& /dev/null || continue
@@ -128,7 +136,7 @@ _gwt_execute() {
     else
         tag=$(echo $branch | rev | cut -d/ -f1 | rev)
         branch_exists=true
-        [ "$(git.exe branch | grep $branch | wc -l)" = "0" ] && branch_exists=false
+        [ "$(git.exe branch | grep -e "$branch\$" | wc -l)" = "0" ] && branch_exists=false
 
         # Determine folder name based on flags and existing worktrees
         if [ "$use_tag_format" = "true" ]; then
@@ -180,25 +188,37 @@ _gwt_execute() {
                     return 1
                 fi
             else
-                # Check if main repo is currently on this branch
+                # Find default branch (try main, then master)
+                local default_branch=$(_git_get_default_branch)
+                if [ -z "$default_branch" ]; then
+                    echo "❌ Cannot proceed: no 'main' or 'master' branch found."
+                    return 1
+                fi
+
+                # Checkout appropriate state before fetching/creating worktree
                 local current_branch=$(git.exe branch --show-current)
-                if [ "$current_branch" = "$branch" ]; then
-                    # Check if working tree is clean
+
+                if [ "$branch" = "$default_branch" ]; then
+                    # Target is the default branch - need to get off it first
+                    # (Git won't allow worktree for a branch that's currently checked out)
                     local is_dirty=$(git.exe status --porcelain)
                     if [ -n "$is_dirty" ]; then
-                        echo "❌ Cannot create worktree for branch '$branch' - it is currently checked out with uncommitted changes."
+                        echo "❌ Cannot proceed - there are uncommitted changes."
+                        echo "   Hint: Commit or stash your changes first, then try again."
+                        return 1
+                    fi
+                    echo "🔄 Checking out detached HEAD (worktree will use '$default_branch')..."
+                    git.exe checkout --detach
+                elif [ "$current_branch" != "$default_branch" ]; then
+                    # Normal case: checkout default branch first
+                    local is_dirty=$(git.exe status --porcelain)
+                    if [ -n "$is_dirty" ]; then
+                        echo "❌ Cannot switch to '$default_branch' - there are uncommitted changes."
                         echo "   Hint: Commit or stash your changes first, then try again."
                         return 1
                     fi
 
-                    # Find default branch (try main, then master)
-                    local default_branch=$(_git_get_default_branch)
-                    if [ -z "$default_branch" ]; then
-                        echo "❌ Cannot auto-switch: no 'main' or 'master' branch found."
-                        return 1
-                    fi
-
-                    echo "🔄 Switching main worktree from '$branch' to '$default_branch'..."
+                    echo "🔄 Switching to '$default_branch'..."
                     git.exe checkout "$default_branch"
                 fi
 
@@ -213,10 +233,13 @@ _gwt_execute() {
                 local branch_flag="-b"
                 [ "$branch_exists" = "true" ] && branch_flag=""
 
+                #echo "b_exists=$branch_exists | wt_exists=$worktree_exists | flag=$branch_flag"
+
                 if [ "$worktree_exists" = "true" ]; then
                     echo "⏭️  Worktree ${folder} already exists, skipping..."
                 else
                     echo "➕ Creating worktree ${folder}..."
+                    git.exe worktree prune
                     git.exe worktree add "$(wslpath -w $WORKTREE_HOME/$folder)" $branch_flag $branch
                 fi
             fi
@@ -294,6 +317,51 @@ _gwt_dispatch() {
     _gwt_execute "$cmd" "$branch" "$use_tag_format"
 }
 
+# Get repos for a group from REPO_GROUPS config
+# Args: group_name
+# Returns: comma-separated list of repos
+_gwt_get_group_repos() {
+    local group=$1
+    local line=$(grep "^$group=" "$REPO_GROUPS" 2>/dev/null)
+    [ -z "$line" ] && return 1
+    echo "${line#*=}"
+}
+
+# Add worktrees for all repos in a group
+# Args: group branch use_tag_format
+_gwt_gadd() {
+    local group=$1
+    local branch=$2
+    local use_tag_format=$3
+
+    local repos=$(_gwt_get_group_repos "$group")
+    if [ -z "$repos" ]; then
+        echo "❌ Group '$group' not found in $REPO_GROUPS"
+        return 1
+    fi
+
+    IFS=',' read -ra repo_list <<< "$repos"
+    local total=${#repo_list[@]}
+    local i=0
+    local failed=()
+
+    for repo in "${repo_list[@]}"; do
+        ((i++))
+        echo ""
+        echo "[$i/$total] Adding worktree for: $repo"
+        if ! _gwt_dispatch "add" "$repo" "$branch" "$use_tag_format"; then
+            failed+=("$repo")
+        fi
+    done
+
+    echo ""
+    if [ ${#failed[@]} -gt 0 ]; then
+        echo "⚠️  Failed repos: ${failed[*]}"
+    else
+        echo "✅ All $total worktrees created successfully"
+    fi
+}
+
 gwt() {
     # Verify WSL interop is working
     wslexe check || return 1
@@ -313,6 +381,9 @@ gwt() {
         ls)
             _gwt_ls
             ;;
+        cd)
+            cd "$WORKTREE_HOME"
+            ;;
         clear)
             _gwt_clear
             ;;
@@ -327,6 +398,13 @@ gwt() {
         add|claude|rm)
             _gwt_dispatch "$@"
             ;;
+        gadd)
+            local group=$2
+            local branch=$3
+            local use_tag_format="false"
+            [ "$4" = "-b" ] && use_tag_format="true"
+            _gwt_gadd "$group" "$branch" "$use_tag_format"
+            ;;
         *)
             _gwt_help
             ;;
@@ -340,7 +418,7 @@ _fzf_complete_gwt() {
 
     # First arg: complete subcommands
     if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "ls add rm clear code edit claude help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "cd ls add gadd rm clear code edit claude help" -- "$cur") )
         return
     fi
 
@@ -350,12 +428,17 @@ _fzf_complete_gwt() {
     case "$cmd" in
         rm)
             # Show existing worktrees
-            selected=$(ls -1d "$WORKTREE_HOME"/*/ 2>/dev/null | xargs -n1 basename | \
+            selected=$(ls -1d "$WORKTREE_HOME"/*/ 2>/dev/null | xargs -n1 basename | grep -v '^_' | \
                 fzf --height=70% --layout=reverse --preview "$EZA_PREVIEW $WORKTREE_HOME/{}")
             ;;
         add|code|edit|claude)
             # Show repos from cache
             selected=$(fzf --height=70% --layout=reverse --preview "$EZA_PREVIEW $REPO_HOME/{}" < "$REPO_CACHE")
+            ;;
+        gadd)
+            # Show groups from config (extract group names before '=')
+            selected=$(cut -d= -f1 "$REPO_GROUPS" 2>/dev/null | grep -v '^#' | grep -v '^$' | \
+                fzf --height=70% --layout=reverse --query "$cur")
             ;;
     esac
 
@@ -364,4 +447,6 @@ _fzf_complete_gwt() {
     fi
     printf '\e[5n'
 }
+# Bind to redraw prompt after fzf exits (responds to \e[5n device status report)
+bind '"\e[0n": redraw-current-line' 2>/dev/null
 complete -F _fzf_complete_gwt -o default -o bashdefault gwt

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+bash_debug "Loading dev.sh"
+
 # Configuration
 WARN_MISSING_HELPERS=true # Set to FALSE to skip warning when missing useful helpers
 
@@ -22,7 +24,7 @@ alias docker-compose="podman.exe compose"
 alias podman="podman.exe"
 alias dotnet="dotnet.exe"
 alias gh="gh.exe"
-alias claude="npx @anthropic-ai/claude-code"
+alias cc="cmd.exe /c claude"
 
 
 function _warn_dev_helper() {

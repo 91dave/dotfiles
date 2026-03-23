@@ -1,5 +1,7 @@
 #!/bin/bash
 
+bash_debug "Loading terraform.sh"
+
 # Terraform support
 function tfhelp() {
     echo "🏗️  Terraform Helpers"
@@ -54,3 +56,4 @@ tftest() {
 alias tf="terraform.exe"
 alias terraform="terraform.exe"
 alias tfinit="terraform.exe init"
+

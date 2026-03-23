@@ -1,14 +1,19 @@
 #!/bin/bash
 
+bash_debug "Loading git.sh"
+
 ## CONFIGURATION
 export REPO_HOME_WIN='C:\Code'
-export WORKTREE_HOME_WIN='C:\Code\workspace'
+export WORKTREE_HOME_WIN='C:\Code\worktrees'
+export WORKSPACE_HOME_WIN='C:\Code\workspaces'
 
 ## Variables
 export REPO_HOME=$(wslpath $REPO_HOME_WIN)
 export REPO_CACHE=$REPO_HOME/repos-cache.lst
 export REPO_IGNORE=$REPO_HOME/.reposignore
+export REPO_GROUPS=$REPO_HOME/repos-groups.cfg
 export WORKTREE_HOME=$(wslpath $WORKTREE_HOME_WIN)
+export WORKSPACE_HOME=$(wslpath $WORKSPACE_HOME_WIN)
 
 ## Shared Helpers
 
@@ -40,3 +45,5 @@ _git_get_default_branch() {
 _GIT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_GIT_SCRIPT_DIR/git-repos.bash"
 source "$_GIT_SCRIPT_DIR/git-gwt.bash"
+source "$_GIT_SCRIPT_DIR/git-workspaces.bash"
+

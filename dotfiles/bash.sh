@@ -18,9 +18,13 @@ set bell-style none
 
 alias time='$(which time) --format="Time: %E CPU: %P RAM: %M kB"'
 
+bash_debug() {
+    [ -n "$BASH_DEBUG" ] && echo "$@"
+}
+
 # Include other dotfiles files
 reload() {
-    for f in ~/.dotfiles/*; do source $f; done
+    for f in ~/.dotfiles/*.sh; do source $f; done
 }
 
 reload

@@ -9,6 +9,10 @@ case "$1" in
         cp ~/.dircolors dotfiles/dircolors
         cp ~/.screenrc dotfiles/screenrc
         cp ~/.vimrc dotfiles/vimrc
+
+        claude_folder=$(wslpath $(cmd.exe /c echo %userprofile%) | sed -e 's/\r//g')/.claude
+
+        cp $claude_folder/settings.json dotfiles/claude/
         ;;
     install)
             cd dotfiles

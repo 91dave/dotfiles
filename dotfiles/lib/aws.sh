@@ -1,5 +1,7 @@
 #!/bin/bash
 
+bash_debug "Loading aws.sh"
+
 export AWS_CONFIG_WSL=true
 
 function aws_help() {
@@ -137,3 +139,4 @@ function aws_ecr() {
     aws ecr get-login-password --region $region | docker login --username AWS --password-stdin $account_id.dkr.ecr.$region.amazonaws.com
     echo "✅ Logged in to $account_id.dkr.ecr.$region.amazonaws.com"
 }
+

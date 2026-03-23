@@ -10,14 +10,17 @@
       "Bash(grep:*)",
       "Bash(wsl find:*)",
       "Bash(wsl cat:*)",
+      "Bash(wsl head:*)",
       "Bash(wsl echo:*)",
       "Bash(wsl ls:*)",
       "Bash(wsl grep:*)",
+      "Bash(wsl sleep:*)",
       "Bash(npm install:*)",
       "Bash(node:*)",
       "Bash(npm test:*)",
       "Bash(npm run:*)",
       "Bash(npm start:*)",
+      "Bash(npx vitest run)",
       "Bash(npx playwright test:*)",
       "Bash(dotnet --version:*)",
       "Bash(dotnet restore:*)",
@@ -44,8 +47,17 @@
       "Bash(gh run view:*)",
       "Bash(gh run watch:*)",
       "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh repo view:*)",
       "Bash(git add:*)",
       "Bash(git rm:*)",
+      "Bash(git log:*)",
+      "Bash(git stash:*)",
+      "Bash(git push:*)",
+      "Bash(gh workflow list:*)",
+      "Bash(gh workflow view:*)",
+      "Bash(gh workflow run:*)",
       "Bash(pkill:*)",
       "Bash(killall:*)",
       "Bash(taskkill:*)",
@@ -55,14 +67,23 @@
       "Bash(powershell Start-Sleep:*)",
       "WebSearch",
       "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.github.com)",
       "WebFetch(domain:stackoverflow.com)",
-      "WebFetch(domain:docs.docker.com)"
+      "WebFetch(domain:docs.docker.com)",
+      "WebFetch(domain:www.nuget.org)",
+      "WebFetch(domain:code.claude.com)",
+      "WebFetch(domain:docs.claude.com)"
     ],
     "deny": [],
     "ask": [
-      "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git commit:*)"
     ]
   },
-  "alwaysThinkingEnabled": false
+  "statusLine": {
+    "type": "command",
+    "command": "wsl /mnt/c/Users/DaveA/.claude/statusline-detailed.sh",
+    "padding": 0
+  },
+  "alwaysThinkingEnabled": true,
+  "model": "sonnet[1m]"
 }

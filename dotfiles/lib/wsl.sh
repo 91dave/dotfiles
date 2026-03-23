@@ -1,5 +1,7 @@
 #!/bin/bash
 
+bash_debug "Loading wsl.sh"
+
 function wsl_help() {
     echo "🐧 WSL Helpers"
     echo ""
@@ -61,3 +63,4 @@ function wslexe() {
 
 # Check WSL interop on interactive shell startup
 [[ $- == *i* ]] && wslexe check
+
