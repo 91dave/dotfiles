@@ -6,6 +6,8 @@ _gws_help() {
     echo "Manage workspaces in $WORKSPACE_HOME"
     echo ""
     echo "Usage:"
+    echo "  gws ls                  📋 List all workspaces"
+    echo "  gws cd                  📂 pushd into workspace root"
     echo "  gws cd <workspace>      📂 pushd into matching workspace"
     echo "  gws claude <workspace>  🤖 Open Claude Code in matching workspace"
     echo "  gws edit <workspace>    🚀 Open VS Code in matching workspace"
@@ -45,8 +47,23 @@ _gws_find() {
     echo "${matches[0]}"
 }
 
+_gws_ls() {
+    echo "📋 Workspaces in $WORKSPACE_HOME:"
+    echo ""
+    for dir in "$WORKSPACE_HOME"/*/; do
+        [[ -d "$dir" ]] || continue
+        echo "  📁 $(basename "$dir")"
+    done
+}
+
 _gws_cd() {
     local search="$1"
+
+    if [[ -z "$search" ]]; then
+        pushd "$WORKSPACE_HOME" > /dev/null
+        return
+    fi
+
     local ws=$(_gws_find "$search") || return 1
 
     local ws_path="$WORKSPACE_HOME/$ws"
@@ -85,6 +102,7 @@ gws() {
     local cmd="${1:-help}"
 
     case "$cmd" in
+        ls)             _gws_ls ;;
         cd)             _gws_cd "$2" ;;
         claude)         _gws_claude "$2" ;;
         edit|code)      _gws_edit "$2" ;;
@@ -100,7 +118,7 @@ _fzf_complete_gws() {
 
     # First arg: complete subcommands
     if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "cd claude edit code cmd help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "ls cd claude edit code cmd help" -- "$cur") )
         return
     fi
 
