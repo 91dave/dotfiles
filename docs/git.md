@@ -474,6 +474,26 @@ gwt add myapp feature/new-feature
 gwt add myapp -b feature/another-feature
 ```
 
+#### Dry-run worktree add
+```bash
+gwt hadd [branch]           # Preview the add command (default folder)
+gwt hadd -b [branch]        # Preview the add command (tagged folder)
+```
+Prints the `git worktree add` command that would be executed, without actually creating the worktree. Useful for verifying paths and flags before committing to a worktree.
+
+**With repository search:**
+```bash
+gwt hadd myapp feature/new-feature
+gwt hadd myapp -b feature/another-feature
+```
+
+**Example output:**
+```
+🔍 Dry-run: would execute:
+   git.exe worktree prune
+   git.exe worktree add "C:\Code\workspace\myapp" feature/new-feature
+```
+
 #### Remove worktree
 ```bash
 gwt rm              # Remove default worktree (repo name folder)

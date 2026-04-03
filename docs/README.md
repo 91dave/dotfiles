@@ -8,6 +8,7 @@ Comprehensive documentation for all helper functions and aliases in `/dotfiles/l
 - [Kubernetes Helpers](kubernetes.md)
 - [Telepresence Helpers](telepresence.md)
 - [Terraform Helpers](terraform.md)
+- [Ralph - Autonomous Loop Runner](ralph.md)
 - [Todo List](todo.md)
 - [WSL Integration Helpers](wsl.md)
 

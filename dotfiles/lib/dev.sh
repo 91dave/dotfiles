@@ -24,7 +24,7 @@ alias docker-compose="podman.exe compose"
 alias podman="podman.exe"
 alias dotnet="dotnet.exe"
 alias gh="gh.exe"
-alias cc="cmd.exe /c claude"
+alias cc="claude.exe"
 
 
 function _warn_dev_helper() {

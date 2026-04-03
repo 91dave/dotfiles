@@ -12,6 +12,8 @@ _gwt_help() {
     echo "  gwt ls                        📋 List all worktrees in workspace"
     echo "  gwt add <repo> <branch>       ➕ Find repo and create worktree (repo name as folder)"
     echo "  gwt add <repo> -b <branch>    ➕ Find repo and create worktree (repo-branch as folder)"
+    echo "  gwt hadd <repo> <branch>      🔍 Dry-run: print the worktree add command without running it"
+    echo "  gwt hadd <repo> -b <branch>   🔍 Dry-run: print the worktree add command (repo-branch folder)"
     echo "  gwt gadd <group> <branch>     ➕ Add worktrees for all repos in a group"
     echo "  gwt gadd <group> <branch> -b  ➕ Add worktrees for group (repo-branch as folder)"
     echo "  gwt edit <repo> [branch]      🚀 Open worktree in VS Code (create branch if given)"
@@ -23,6 +25,8 @@ _gwt_help() {
     echo "  gwt                        📋 List worktrees in current repo"
     echo "  gwt add <branch>           ➕ Create worktree (uses repo name as folder)"
     echo "  gwt add -b <branch>        ➕ Create worktree (uses repo-branch as folder)"
+    echo "  gwt hadd <branch>          🔍 Dry-run: print the worktree add command"
+    echo "  gwt hadd -b <branch>       🔍 Dry-run: print the worktree add command (repo-branch folder)"
     echo "  gwt edit [branch]          🚀 Open worktree in VS Code (create branch if given)"
     echo "  gwt rm                     ➖ Delete default worktree for this repo"
     echo "  gwt rm [branch]            ➖ Delete worktree named repo-branch"
@@ -177,7 +181,7 @@ _gwt_execute() {
                 echo "⏭️  Worktree ${folder} does not exist, skipping..."
             fi
             ;;
-        add|claude|code|edit)
+        add|hadd|claude|code|edit)
             # For code/edit without branch, just open existing default worktree
             if [ -z "$branch" ] && [[ "$cmd" =~ ^(code|edit)$ ]]; then
                 if [ "$worktree_exists" = "true" ]; then
@@ -237,6 +241,10 @@ _gwt_execute() {
 
                 if [ "$worktree_exists" = "true" ]; then
                     echo "⏭️  Worktree ${folder} already exists, skipping..."
+                elif [ "$cmd" = "hadd" ]; then
+                    echo "🔍 Dry-run: would execute:"
+                    echo "   git.exe worktree prune"
+                    echo "   git.exe worktree add \"$(wslpath -w $WORKTREE_HOME/$folder)\" $branch_flag $branch"
                 else
                     echo "➕ Creating worktree ${folder}..."
                     git.exe worktree prune
@@ -285,7 +293,7 @@ _gwt_dispatch() {
 
         # For add/claude, branch is required
         # For rm/code/edit, branch is optional (default worktree operation)
-        if [ -z "$branch" ] && [[ "$cmd" =~ ^(add|claude)$ ]]; then
+        if [ -z "$branch" ] && [[ "$cmd" =~ ^(add|hadd|claude)$ ]]; then
             _gwt_help && return
         fi
 
@@ -395,7 +403,7 @@ gwt() {
             fi
             _gwt_dispatch "$@"
             ;;
-        add|claude|rm)
+        add|hadd|claude|rm)
             _gwt_dispatch "$@"
             ;;
         gadd)
@@ -431,7 +439,7 @@ _fzf_complete_gwt() {
             selected=$(ls -1d "$WORKTREE_HOME"/*/ 2>/dev/null | xargs -n1 basename | grep -v '^_' | \
                 fzf --height=70% --layout=reverse --preview "$EZA_PREVIEW $WORKTREE_HOME/{}")
             ;;
-        add|code|edit|claude)
+        add|hadd|code|edit|claude)
             # Show repos from cache
             selected=$(fzf --height=70% --layout=reverse --preview "$EZA_PREVIEW $REPO_HOME/{}" < "$REPO_CACHE")
             ;;

@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
+  },
   "permissions": {
     "allow": [
       "Bash(echo:*)",
@@ -8,21 +11,31 @@
       "Bash(findstr:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(sed:*)",
       "Bash(wsl find:*)",
       "Bash(wsl cat:*)",
+      "Bash(wsl cp:*)",
+      "Bash(wsl mv:*)",
       "Bash(wsl head:*)",
       "Bash(wsl echo:*)",
       "Bash(wsl ls:*)",
       "Bash(wsl grep:*)",
       "Bash(wsl sleep:*)",
-      "Bash(npm install:*)",
+      "Bash(wsl curl:*)",
+      "Bash(wsl base64:*)",
       "Bash(node:*)",
+      "Bash(npm install:*)",
       "Bash(npm test:*)",
       "Bash(npm run:*)",
       "Bash(npm start:*)",
       "Bash(npx vitest run)",
       "Bash(npx playwright test:*)",
       "Bash(dotnet --version:*)",
+      "Bash(dotnet list:*)",
       "Bash(dotnet restore:*)",
       "Bash(dotnet build:*)",
       "Bash(dotnet test:*)",
@@ -49,12 +62,17 @@
       "Bash(gh pr list:*)",
       "Bash(gh pr view:*)",
       "Bash(gh pr create:*)",
+      "Bash(gh pr merge:*)",
       "Bash(gh repo view:*)",
       "Bash(git add:*)",
       "Bash(git rm:*)",
+      "Bash(git mv:*)",
       "Bash(git log:*)",
+      "Bash(git show:*)",
       "Bash(git stash:*)",
       "Bash(git push:*)",
+      "Bash(gh search:*)",
+      "Bash(git checkout:*)",
       "Bash(gh workflow list:*)",
       "Bash(gh workflow view:*)",
       "Bash(gh workflow run:*)",
@@ -64,7 +82,17 @@
       "Bash(for i in {1..5})",
       "Bash(curl:*)",
       "Bash(do curl:*)",
+      "Bash(set:*)",
       "Bash(powershell Start-Sleep:*)",
+      "Bash(pwsh -File \"$USERPROFILE\\\\.claude\\\\skills\\\\manage-delivery\\\\sharepoint-helpers.ps1\":*)",
+      "Bash(pwsh -File:*)",
+      "Bash(kubectl config:*)",
+      "Bash(kubectl get:*)",
+      "Bash(kubectl run:*)",
+      "Bash(kubectl exec:*)",
+      "Bash(kubectl wait:*)",
+      "Bash(kubectl delete pod es-query --ignore-not-found)",
+      "Bash(aws cloudwatch:*)",
       "WebSearch",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:docs.github.com)",
@@ -72,18 +100,95 @@
       "WebFetch(domain:docs.docker.com)",
       "WebFetch(domain:www.nuget.org)",
       "WebFetch(domain:code.claude.com)",
-      "WebFetch(domain:docs.claude.com)"
+      "WebFetch(domain:docs.claude.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "mcp__azdo__core_get_identity_ids",
+      "mcp__azdo__core_list_projects",
+      "mcp__azdo__search_workitem",
+      "mcp__azdo__wit_get_work_item",
+      "mcp__azdo__wit_get_work_items_batch_by_ids",
+      "mcp__azdo__wit_get_work_item_type",
+      "mcp__azdo__wit_list_work_item_comments",
+      "mcp__azdo__wit_get_work_item",
+      "mcp__icepanel__getLandscapes",
+      "mcp__icepanel__getLandscape",
+      "mcp__icepanel__getModelObjects",
+      "mcp__icepanel__getModelObject",
+      "mcp__icepanel__getModelObjectRelationships",
+      "mcp__icepanel__getTechnologyCatalog",
+      "mcp__icepanel__getTeams",
+      "mcp__azdo__wit_get_work_item",
+      "mcp__azure__subscription_list",
+      "mcp__azure__group_list",
+      "mcp__azure__monitor",
+      "mcp__azure__applicationinsights",
+      "mcp__cloudwatch__get_metric_data",
+      "mcp__claude_ai_Microsoft_365__outlook_email_search",
+      "mcp__claude_ai_Microsoft_365__outlook_calendar_search",
+      "mcp__claude_ai_Microsoft_365__find_meeting_availability",
+      "Bash(az containerapp show:*)",
+      "Bash(az containerapp list:*)",
+      "Bash(az containerapp list-usages:*)",
+      "Bash(az containerapp logs show:*)",
+      "Bash(az containerapp revision list:*)",
+      "Bash(az containerapp revision show:*)",
+      "Bash(az containerapp replica list:*)",
+      "Bash(az containerapp replica show:*)",
+      "Bash(az containerapp ingress show:*)",
+      "Bash(az containerapp hostname list:*)",
+      "Bash(az containerapp identity show:*)",
+      "Bash(az containerapp env show:*)",
+      "Bash(az containerapp env list:*)",
+      "Bash(az containerapp env list-usages:*)",
+      "Bash(az containerapp env logs show:*)",
+      "Bash(az account list:*)",
+      "Bash(az group list:*)",
+      "Bash(az extension:*)",
+      "Bash(az monitor log-analytics:*)",
+      "Bash(az monitor:*)",
+      "Bash(python3:*)",
+      "Read(~/.claude/skills/**)",
+      "Read(/mnt/c/Code/_docs/docs-claude-helpers/skills/**)"
     ],
-    "deny": [],
-    "ask": [
-      "Bash(git commit:*)"
+    "deny": [
+      "Skill(setup-workspace)"
+    ],
+    "ask": [],
+    "defaultMode": "default"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /c/Users/DaveA/.claude/config/validate-bash.mine.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c \"rm -f bash.exe.stackdump\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
     "type": "command",
-    "command": "wsl /mnt/c/Users/DaveA/.claude/statusline-detailed.sh",
+    "command": "bash /c/Users/DaveA/.claude/config/status.sh",
     "padding": 0
   },
   "alwaysThinkingEnabled": true,
-  "model": "sonnet[1m]"
+  "autoUpdatesChannel": "latest",
+  "voiceEnabled": true,
+  "skipAutoPermissionPrompt": true
 }

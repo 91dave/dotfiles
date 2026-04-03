@@ -10,7 +10,9 @@ case "$1" in
         cp ~/.screenrc dotfiles/screenrc
         cp ~/.vimrc dotfiles/vimrc
 
-        claude_folder=$(wslpath $(cmd.exe /c echo %userprofile%) | sed -e 's/\r//g')/.claude
+        #claude_windows="%USERPROFILE\.claude"
+        claude_windows="C:\\Code\\_docs\docs-claude-helpers"
+        claude_folder=$(wslpath $claude_windows | sed -e 's/\r//g')
 
         cp $claude_folder/settings.json dotfiles/claude/
         ;;

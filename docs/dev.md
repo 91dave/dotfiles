@@ -23,7 +23,7 @@ alias docker="podman.exe"
 alias docker-compose="podman.exe compose"
 alias dotnet="dotnet.exe"
 alias gh="gh.exe"
-alias cc="cmd.exe /c claude"
+alias cc="claude.exe"
 alias bat="batcat"  # Shorter alias for batcat
 ```
 
