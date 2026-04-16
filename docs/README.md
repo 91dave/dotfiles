@@ -9,6 +9,7 @@ Comprehensive documentation for all helper functions and aliases in `/dotfiles/l
 - [Telepresence Helpers](telepresence.md)
 - [Terraform Helpers](terraform.md)
 - [Ralph - Autonomous Loop Runner](ralph.md)
+- [pi-coding-agent Setup](pi.md)
 - [Todo List](todo.md)
 - [WSL Integration Helpers](wsl.md)
 

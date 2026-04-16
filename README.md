@@ -51,7 +51,7 @@ Comprehensive documentation for all helper functions and aliases is available in
 - `khelp` - Kubernetes helpers
 - `reload` - Reload all dotfiles without restarting shell
 - `repos reset` - Daily refresh (fetch + clear + status)
-- `ralph` - Autonomous Claude Code loop runner
+- `ralph` - Autonomous coding agent loop runner (Claude Code or pi)
 - `todo <cmd>` - Simple todo list (add/done/rm/ls)
 - `tphelp` - Telepresence helpers
 - `tfhelp` - Terraform helpers

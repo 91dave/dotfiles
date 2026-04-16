@@ -1,0 +1,68 @@
+#!/bin/bash
+# repo-find: Locate Quartex repos by search term
+# Designed for non-interactive use by coding agents
+#
+# Usage:
+#   repo-find <search-term>          # Print full path to matching repo
+#   repo-find --list                 # List all repos
+#   repo-find --list <search-term>   # List repos matching search term
+
+REPO_HOME="/mnt/c/Code"
+REPO_CACHE="$REPO_HOME/repos-cache.lst"
+
+if [[ ! -f "$REPO_CACHE" ]]; then
+    echo "❌ Repo cache not found: $REPO_CACHE" >&2
+    echo "   Run 'repos cache' in an interactive shell to rebuild" >&2
+    exit 1
+fi
+
+case "${1:-}" in
+    --list)
+        if [[ -n "${2:-}" ]]; then
+            grep -i "$2" "$REPO_CACHE"
+        else
+            cat "$REPO_CACHE"
+        fi
+        ;;
+    --help|-h|"")
+        echo "Usage: repo-find <search-term>    # Print full path to matching repo"
+        echo "       repo-find --list [term]     # List all (or matching) repos"
+        exit 0
+        ;;
+    *)
+        matches=$(grep -i "$1" "$REPO_CACHE")
+        count=$(echo "$matches" | grep -c . || true)
+
+        if [[ "$count" -eq 0 ]]; then
+            # No local match — search GitHub
+            owners="91dave amdigital-co-uk"
+            gh_matches=""
+            for owner in $owners; do
+                hits=$(gh.exe search repos "$1" --owner "$owner" --json fullName --jq '.[].fullName' 2>/dev/null)
+                if [[ -n "$hits" ]]; then
+                    gh_matches="${gh_matches:+$gh_matches$'\n'}$hits"
+                fi
+            done
+
+            if [[ -n "$gh_matches" ]]; then
+                gh_count=$(echo "$gh_matches" | wc -l)
+                echo "⚠️  Not cloned locally. Found on GitHub:" >&2
+                echo "$gh_matches" | while read -r repo; do
+                    echo "   $repo" >&2
+                done
+                exit 2
+            fi
+
+            echo "❌ No repos found for '$1' (local cache or GitHub)" >&2
+            exit 1
+        elif [[ "$count" -gt 1 ]]; then
+            echo "❌ Multiple repos found for '$1':" >&2
+            echo "$matches" | while read -r r; do
+                echo "   $REPO_HOME/$r" >&2
+            done
+            exit 1
+        fi
+
+        echo "$REPO_HOME/$matches"
+        ;;
+esac

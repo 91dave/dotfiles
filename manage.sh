@@ -15,6 +15,16 @@ case "$1" in
         claude_folder=$(wslpath $claude_windows | sed -e 's/\r//g')
 
         cp $claude_folder/settings.json dotfiles/claude/
+
+        # pi
+        cp ~/.pi/agent/settings.json dotfiles/pi/
+        cp ~/.pi/agent/template.md dotfiles/pi/
+        cp ~/.pi/agent/build-agents-md.sh dotfiles/pi/
+        cp ~/.pi/agent/extensions/subagent/index.ts dotfiles/pi/extensions/subagent/
+        cp ~/.pi/agent/extensions/subagent/agents.ts dotfiles/pi/extensions/subagent/
+
+        # bin
+        cp ~/.local/bin/repo-find dotfiles/bin/
         ;;
     install)
             cd dotfiles
@@ -32,6 +42,20 @@ case "$1" in
             cp dircolors ../.dircolors
             cp screenrc ../.screenrc
             cp vimrc ../.vimrc
+
+            # pi
+            mkdir -p ~/.pi/agent/extensions/subagent
+            cp pi/settings.json ~/.pi/agent/
+            cp pi/template.md ~/.pi/agent/
+            cp pi/build-agents-md.sh ~/.pi/agent/
+            cp pi/extensions/subagent/index.ts ~/.pi/agent/extensions/subagent/
+            cp pi/extensions/subagent/agents.ts ~/.pi/agent/extensions/subagent/
+
+            # bin
+            mkdir -p ~/.local/bin
+            cp bin/repo-find ~/.local/bin/
+            chmod +x ~/.local/bin/repo-find
+
             cd
             bash ; exit
 

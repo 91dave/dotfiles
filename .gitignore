@@ -1,2 +1,4 @@
 *secret*
 *.todo.md
+dotfiles/pi/auth.json
+.pi/agent/auth.json

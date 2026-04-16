@@ -1,0 +1,20 @@
+{
+  "skills": [
+    "/mnt/c/Code/_docs/docs-claude-helpers/skills"
+  ],
+  "lastChangelogVersion": "0.67.3",
+  "defaultProvider": "github-copilot",
+  "defaultModel": "claude-sonnet-4.6",
+  "defaultThinkingLevel": "medium",
+  "theme": "dark",
+  "quietStartup": true,
+  "hideThinkingBlock": true,
+  "packages": [
+    "npm:@counterposition/pi-web-search"
+  ],
+  "agentDirs": [
+    "/mnt/c/Code/_docs/docs-claude-helpers/agents"
+  ],
+  "agentModel": "claude-sonnet-4",
+  "enableSkillCommands": true
+}

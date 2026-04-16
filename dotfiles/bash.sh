@@ -4,6 +4,9 @@
 
 export PS1="\[\033[01;32m\]\u\[\033[01;00m\]@\[\033[01;33m\]$HOST_NICKNAME\[\033[00m\]:\[\033[01;34m\]\W\[\033[00m\]\$ "
 
+# user-local binaries
+export PATH="$HOME/.local/bin:$PATH"
+
 # include directory colors
 [ -e "$HOME/.dircolors" ] && DIR_COLORS="$HOME/.dircolors"
 [ -e "$DIR_COLORS" ] || DIR_COLORS=""

@@ -1,4 +1,4 @@
-# Ralph - Autonomous Claude Code Loop Runner
+# Ralph - Autonomous Coding Agent Loop Runner
 
 An autonomous loop runner that iterates Claude Code over a set of tasks until all work is complete or an error is encountered.
 
@@ -7,7 +7,7 @@ An autonomous loop runner that iterates Claude Code over a set of tasks until al
 ```bash
 source dotfiles/lib/ralph.sh
 
-ralph [-p <prompt>] [-n <iterations>] [-i] [-l] [-v] [--pause] [-- arg1 arg2 ...]
+ralph [-p <prompt>] [-n <iterations>] [-i] [-l] [-v] [--pi|--claude] [--pause] [-- arg1 arg2 ...]
 ```
 
 ## Options
@@ -19,6 +19,8 @@ ralph [-p <prompt>] [-n <iterations>] [-i] [-l] [-v] [--pause] [-- arg1 arg2 ...
 | `-i` | Interactive mode — launches Claude without headless `-p` flag (implies `-n 1`) | Off |
 | `-l` | Use native Linux `claude` binary instead of Windows `claude.exe` | Windows mode |
 | `-v, --verbose` | Show all tool calls in progress output (default shows only progress-relevant calls) | Off |
+| `--claude` | Use Claude Code as the underlying agent (default) | Claude Code |
+| `--pi` | Use pi-coding-agent as the underlying agent | Claude Code |
 | `--pause` | Prompt for confirmation before each iteration | Off |
 | `-h, --help` | Show help | |
 
@@ -89,7 +91,7 @@ In headless mode, ralph streams filtered progress rather than raw Claude output.
 ```
 
 - **▶** — Tool call (name and key input)
-- **◇** — Assistant text (first line only)
+- **◇** — Assistant text
 - **✓** — Iteration summary (turns, cost, duration)
 - **⏳** — API retry (on transient errors)
 
@@ -125,6 +127,9 @@ ralph -i -- /path/to/project
 
 # Verbose output — see all tool calls
 ralph -v -- /path/to/project
+
+# Use pi-coding-agent instead of Claude Code
+ralph --pi -- /path/to/project
 
 # Use native Linux claude binary
 ralph -l -- /path/to/project
