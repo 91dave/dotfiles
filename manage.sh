@@ -25,6 +25,7 @@ case "$1" in
 
         # bin
         cp ~/.local/bin/repo-find dotfiles/bin/
+        cp ~/.local/bin/web dotfiles/bin/
         ;;
     install)
             cd dotfiles
@@ -55,6 +56,8 @@ case "$1" in
             mkdir -p ~/.local/bin
             cp bin/repo-find ~/.local/bin/
             chmod +x ~/.local/bin/repo-find
+            cp bin/web ~/.local/bin/
+            chmod +x ~/.local/bin/web
 
             cd
             bash ; exit

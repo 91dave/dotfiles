@@ -11,6 +11,7 @@ Comprehensive documentation for all helper functions and aliases in `/dotfiles/l
 - [Ralph - Autonomous Loop Runner](ralph.md)
 - [pi-coding-agent Setup](pi.md)
 - [Todo List](todo.md)
+- [Standalone CLI Tools](tools.md)
 - [WSL Integration Helpers](wsl.md)
 
 ## Common Workflows

@@ -1,0 +1,250 @@
+#!/bin/bash
+# web: Search the web and fetch pages as clean markdown
+# Designed for non-interactive use by coding agents
+#
+# Usage:
+#   web search <query>               # Search via DuckDuckGo, return markdown results
+#   web fetch <url>                   # Fetch a URL, return clean markdown via Jina Reader
+#   web fetch <url> --max <chars>     # Limit output to <chars> characters (default: 8000)
+
+set -euo pipefail
+
+JINA_ENDPOINT="https://r.jina.ai/"
+DDG_ENDPOINT="https://html.duckduckgo.com/html/"
+FETCH_MAX_CHARS=8000
+USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+CURL_TIMEOUT=30
+
+usage() {
+    cat <<'EOF'
+web - Search the web and fetch pages as clean markdown
+
+Usage:
+  web search <query>                Search via DuckDuckGo, return markdown results
+  web fetch <url>                   Fetch a URL via Jina Reader as clean markdown
+  web fetch <url> --max <chars>     Limit fetch output (default: 8000, max: 20000)
+  web --help                        Show this help
+
+Search options:
+  web search <query> --max <n>      Maximum number of results (default: 10)
+
+Examples:
+  web search "rust programming language"
+  web search "bash best practices" --max 5
+  web fetch "https://docs.python.org/3/tutorial/"
+  web fetch "https://example.com" --max 16000
+
+Search backend: DuckDuckGo (no API key required)
+Fetch backend:  Jina Reader (no API key required, optional JINA_API_KEY for higher limits)
+EOF
+}
+
+die() {
+    echo "ERROR: $*" >&2
+    exit 1
+}
+
+# Pipe output through bat for interactive use, raw otherwise
+render() {
+    local bat_cmd
+    bat_cmd=$(command -v bat || command -v batcat || true)
+    if [[ -t 1 ]] && [[ -n "$bat_cmd" ]]; then
+        "$bat_cmd" -l markdown --plain --paging=never
+    else
+        cat
+    fi
+}
+
+# ── Search via DuckDuckGo HTML ──────────────────────────────────────────────
+
+do_search() {
+    local query="$1"
+    local max_results="${2:-10}"
+
+    [[ -z "$query" ]] && die "search requires a query argument"
+
+    local html
+    html=$(curl -sS --max-time "$CURL_TIMEOUT" -X POST "$DDG_ENDPOINT" \
+        -d "q=${query}" \
+        -H "User-Agent: $USER_AGENT" \
+        -H "Referer: https://html.duckduckgo.com/" 2>&1) \
+        || die "DuckDuckGo request failed"
+
+    # Check for CAPTCHA / bot detection
+    if echo "$html" | grep -q 'anomaly-modal\|botnet\|captcha'; then
+        die "DuckDuckGo returned a CAPTCHA. Try again later or from a different network."
+    fi
+
+    # Parse results with Python (handles HTML entities, tag stripping, ad filtering)
+    echo "$html" | python3 -c "
+import sys, re
+from html import unescape
+
+html = sys.stdin.read()
+max_results = int(sys.argv[1])
+
+# Extract non-ad result blocks
+# Ads have URLs starting with duckduckgo.com/y.js
+titles_urls = re.findall(
+    r'<a rel=\"nofollow\" class=\"result__a\" href=\"([^\"]*)\">(.+?)</a>',
+    html
+)
+snippets = re.findall(
+    r'<a class=\"result__snippet\"[^>]*>(.*?)</a>',
+    html, re.DOTALL
+)
+
+def clean(text):
+    return unescape(re.sub(r'<[^>]+>', '', text)).strip()
+
+def is_ad(url):
+    return 'duckduckgo.com/y.js' in url
+
+count = 0
+for i, (url, title) in enumerate(titles_urls):
+    if is_ad(url):
+        continue
+    if count >= max_results:
+        break
+
+    title_clean = clean(title)
+    snippet_clean = clean(snippets[i]) if i < len(snippets) else ''
+
+    count += 1
+    print(f'[{count}] {title_clean}')
+    print(f'    URL: {url}')
+    if snippet_clean:
+        print(f'    {snippet_clean}')
+    print()
+
+if count == 0:
+    print('No results found.')
+" "$max_results"
+}
+
+# ── Fetch via Jina Reader ───────────────────────────────────────────────────
+
+do_fetch() {
+    local url="$1"
+    local max_chars="${2:-$FETCH_MAX_CHARS}"
+
+    [[ -z "$url" ]] && die "fetch requires a URL argument"
+
+    # Basic URL validation
+    if [[ ! "$url" =~ ^https?:// ]]; then
+        die "Invalid URL: must start with http:// or https://"
+    fi
+
+    # Clamp max_chars
+    if (( max_chars > 20000 )); then
+        max_chars=20000
+    fi
+    if (( max_chars < 100 )); then
+        max_chars=100
+    fi
+
+    # Build headers
+    local -a headers=(
+        -H "Accept: text/plain"
+        -H "X-Retain-Images: none"
+    )
+
+    # Use API key if available (higher rate limits)
+    if [[ -n "${JINA_API_KEY:-}" ]]; then
+        headers+=(-H "Authorization: Bearer $JINA_API_KEY")
+    fi
+
+    local content
+    content=$(curl -sS --max-time "$CURL_TIMEOUT" \
+        "${headers[@]}" \
+        "${JINA_ENDPOINT}${url}" 2>&1) \
+        || die "Jina Reader request failed for: $url"
+
+    # Check for errors
+    if [[ -z "$content" ]]; then
+        die "Empty response from Jina Reader for: $url"
+    fi
+
+    # Truncate and report
+    local total_chars=${#content}
+
+    if (( total_chars <= max_chars )); then
+        echo "$content"
+    else
+        echo "${content:0:$max_chars}"
+        echo ""
+        echo "--- Truncated: showing $max_chars of $total_chars characters ---"
+    fi
+}
+
+# ── Main ────────────────────────────────────────────────────────────────────
+
+case "${1:-}" in
+    search)
+        shift
+        query=""
+        max_results=10
+
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --max)
+                    shift
+                    max_results="${1:-10}"
+                    ;;
+                --help|-h)
+                    usage
+                    exit 0
+                    ;;
+                *)
+                    if [[ -z "$query" ]]; then
+                        query="$1"
+                    else
+                        query="$query $1"
+                    fi
+                    ;;
+            esac
+            shift
+        done
+
+        do_search "$query" "$max_results" | render
+        ;;
+
+    fetch)
+        shift
+        url=""
+        max_chars="$FETCH_MAX_CHARS"
+
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --max)
+                    shift
+                    max_chars="${1:-$FETCH_MAX_CHARS}"
+                    ;;
+                --help|-h)
+                    usage
+                    exit 0
+                    ;;
+                *)
+                    [[ -z "$url" ]] && url="$1"
+                    ;;
+            esac
+            shift
+        done
+
+        do_fetch "$url" "$max_chars" | render
+        ;;
+
+    --help|-h)
+        usage
+        exit 0
+        ;;
+
+    "")
+        usage
+        exit 0
+        ;;
+
+    *)
+        die "Unknown command: $1 (try 'web --help')"
+        ;;
+esac

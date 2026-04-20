@@ -19,7 +19,7 @@ All pi-related dotfiles live under `dotfiles/pi/` and install to `~/.pi/agent/`:
 The live system prompt (`~/.pi/agent/AGENTS.md`) is auto-generated — **don't edit it directly**.
 
 The source files are:
-- `template.md` — the main content, with `@filename.md` include directives
+- `template.md` — the main content, with `@filename.md` include directives (kept deliberately concise; tools document themselves via `--help`)
 - `CLAUDE.md` / `CLAUDE-template.md` / `include/` — symlinks into a separate work repo (`docs-claude-helpers`), providing work-specific context
 
 To rebuild `AGENTS.md` after editing `template.md`:
@@ -37,6 +37,7 @@ Two values in `settings.json` are hard-coded to this machine and will need updat
 - **`skills`** — points to `/mnt/c/Code/_docs/docs-claude-helpers/skills`
 
 Update these to match the local path of your `docs-claude-helpers` clone.
+
 
 ## Extensions
 

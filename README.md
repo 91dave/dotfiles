@@ -56,6 +56,7 @@ Comprehensive documentation for all helper functions and aliases is available in
 - `tphelp` - Telepresence helpers
 - `tfhelp` - Terraform helpers
 - `wsl_help` - WSL integration helpers
+- `web <cmd>` - Web search and page fetching (search/fetch) for coding agents
 - `wslexe <cmd>` - WSL interop manager (get/check/fix)
 
 **Configuration variables:**

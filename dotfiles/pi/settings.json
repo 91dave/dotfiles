@@ -2,16 +2,14 @@
   "skills": [
     "/mnt/c/Code/_docs/docs-claude-helpers/skills"
   ],
-  "lastChangelogVersion": "0.67.3",
+  "lastChangelogVersion": "0.67.68",
   "defaultProvider": "github-copilot",
-  "defaultModel": "claude-sonnet-4.6",
+  "defaultModel": "claude-opus-4.6",
   "defaultThinkingLevel": "medium",
   "theme": "dark",
   "quietStartup": true,
   "hideThinkingBlock": true,
-  "packages": [
-    "npm:@counterposition/pi-web-search"
-  ],
+  "packages": [],
   "agentDirs": [
     "/mnt/c/Code/_docs/docs-claude-helpers/agents"
   ],
