@@ -61,4 +61,7 @@ for file in "$DIR/template.md"; do
     fi
 done
 
+# Normalise line endings to LF
+sed -i 's/\r//' "$OUT"
+
 echo "Built $OUT ($(wc -l < "$OUT") lines)"
