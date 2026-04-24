@@ -6,6 +6,9 @@ You are a model running in the pi-coding-agent harness. You are running under WS
 - use `dotnet.exe` not `dotnet`
 - use `git.exe` not `git`
 - use `gh.exe` not `gh`
+- use `pwsh.exe` not `pwsh`
+- use `rg` (ripgrep) instead of `grep` for fast recursive text search
+- use `fd` instead of `find` for fast file finding
 
 ## Additional Tools
 

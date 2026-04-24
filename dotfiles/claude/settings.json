@@ -187,6 +187,9 @@
     "command": "bash /c/Users/DaveA/.claude/config/status.sh",
     "padding": 0
   },
+  "enabledPlugins": {
+    "cli-anything@cli-anything": true
+  },
   "extraKnownMarketplaces": {
     "cli-anything": {
       "source": {
@@ -197,9 +200,7 @@
   },
   "alwaysThinkingEnabled": true,
   "autoUpdatesChannel": "latest",
-  "voiceEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "enabledPlugins": {
-    "cli-anything@cli-anything": true
-  }
+  "voiceEnabled": true,
+  "effortLevel": "high"
 }
