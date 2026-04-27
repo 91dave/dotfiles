@@ -22,6 +22,7 @@ case "$1" in
         cp ~/.pi/agent/build-agents-md.sh dotfiles/pi/
         cp ~/.pi/agent/extensions/subagent/index.ts dotfiles/pi/extensions/subagent/
         cp ~/.pi/agent/extensions/subagent/agents.ts dotfiles/pi/extensions/subagent/
+        cp ~/.pi/agent/extensions/reset-title-on-exit.ts dotfiles/pi/extensions/
 
         # bin
         cp ~/.local/bin/repo-find dotfiles/bin/
@@ -40,9 +41,9 @@ case "$1" in
                 echo 'source ~/.bash_prefs' >> ~/.bashrc
             fi
 
-            cp dircolors ../.dircolors
-            cp screenrc ../.screenrc
-            cp vimrc ../.vimrc
+            cp dircolors ~/.dircolors
+            cp screenrc ~/.screenrc
+            cp vimrc ~/.vimrc
 
             # pi
             mkdir -p ~/.pi/agent/extensions/subagent
@@ -51,6 +52,7 @@ case "$1" in
             cp pi/build-agents-md.sh ~/.pi/agent/
             cp pi/extensions/subagent/index.ts ~/.pi/agent/extensions/subagent/
             cp pi/extensions/subagent/agents.ts ~/.pi/agent/extensions/subagent/
+            cp pi/extensions/reset-title-on-exit.ts ~/.pi/agent/extensions/
 
             # bin
             mkdir -p ~/.local/bin
