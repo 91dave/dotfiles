@@ -23,6 +23,8 @@ case "$1" in
         cp ~/.pi/agent/extensions/subagent/index.ts dotfiles/pi/extensions/subagent/
         cp ~/.pi/agent/extensions/subagent/agents.ts dotfiles/pi/extensions/subagent/
         cp ~/.pi/agent/extensions/reset-title-on-exit.ts dotfiles/pi/extensions/
+        rm -rf dotfiles/pi/skills
+        cp -r ~/.pi/agent/skills dotfiles/pi/skills
 
         # bin
         cp ~/.local/bin/repo-find dotfiles/bin/
@@ -53,6 +55,7 @@ case "$1" in
             cp pi/extensions/subagent/index.ts ~/.pi/agent/extensions/subagent/
             cp pi/extensions/subagent/agents.ts ~/.pi/agent/extensions/subagent/
             cp pi/extensions/reset-title-on-exit.ts ~/.pi/agent/extensions/
+            cp -r pi/skills ~/.pi/agent/
 
             # bin
             mkdir -p ~/.local/bin
