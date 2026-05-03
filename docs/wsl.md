@@ -2,7 +2,40 @@
 
 Utilities for managing Windows Subsystem for Linux (WSL) integration and binary resolution.
 
+## Environment Variables
+
+Loaded automatically on shell startup:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `USERPROFILE_WIN` | Windows user profile path (forward slashes) | `C:/Users/dave` |
+| `USERPROFILE_WSL` | WSL-mapped user profile path | `/mnt/c/Users/dave` |
+
+These are useful when passing paths to Windows executables (which can't resolve WSL paths):
+
+```bash
+# ✗ Won't work — .exe can't resolve WSL paths
+pwsh.exe -File "$HOME/.pi/agent/script.ps1"
+
+# ✓ Use the Windows-style path
+pwsh.exe -File "$USERPROFILE_WIN/.pi/agent/script.ps1"
+```
+
 ## Functions
+
+### wecho
+
+Runs `cmd.exe /c echo` with Windows variable substitution and strips carriage returns.
+
+```bash
+wecho %USERPROFILE%
+# Output: C:\Users\dave
+
+wecho %APPDATA%
+# Output: C:\Users\dave\AppData\Roaming
+```
+
+Useful for resolving Windows environment variables that aren't available in WSL.
 
 ### wsl_help
 
