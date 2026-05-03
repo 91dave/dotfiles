@@ -1,11 +1,23 @@
 #!/bin/bash
 
+
+# Windows echo helper
+function wecho() {
+    OUTPUT=$(cmd.exe /c echo $@ 2> /dev/null)
+    echo "$OUTPUT" | sed -e "s|\r||g"
+}
+
+## Windows Home variables
+export USERPROFILE_WIN=$(wecho %USERPROFILE% | sed -e "s|\\\|/|g")
+export USERPROFILE_WSL=$(wslpath $USERPROFILE_WIN)
+
 bash_debug "Loading wsl.sh"
 
 function wsl_help() {
     echo "🐧 WSL Helpers"
     echo ""
     echo "  wslexe <cmd>    Manage WSL interop (get, check, fix, help)"
+    echo "  wecho <args>    Echo with windows variable substitution e.g. %USERPROFILE%"
 }
 
 function wslexe() {
@@ -63,4 +75,7 @@ function wslexe() {
 
 # Check WSL interop on interactive shell startup
 [[ $- == *i* ]] && wslexe check
+
+
+
 
