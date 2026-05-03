@@ -32,7 +32,7 @@ Query and update work items, comments, and queries. Use `--json` for structured 
 ```bash
 cli-anything-azdo --json workitem show 12345
 cli-anything-azdo --json workitem children 12345
-cli-anything-azdo comment add 12345 "Comment text"
+cli-anything-azdo comment add 12345 comment.md
 ```
 
 **Trigger:** When `AB#12345` is mentioned, immediately fetch work item details before planning work.
@@ -57,5 +57,26 @@ repo-find --list terraform
 
 **Workflow:** `repo-find <term>` → disambiguate if needed → `cd` to path before working.
 
-@CLAUDE.md
+## WSL ↔ Windows Path Handling for `.exe` Commands
+
+When calling Windows executables (e.g. `pwsh.exe`) with file path arguments:
+
+- **WSL paths (`/mnt/c/...`) do not work** as arguments to `.exe` commands — Windows executables cannot resolve them.
+- **`$USERPROFILE` is not available in WSL** — it won't expand to anything useful, use the following instead
+  - `$USERPROFILE_WIN` - expands to the windows version of the user profile - i.e. `C:/Users/...`
+- **Use Windows-style paths** (`C:/Code/...` or `C:\Code\...`) when passing file paths to `.exe` commands.
+- If a skill or script is located at a WSL path like `/mnt/c/Code/foo/bar.ps1`, convert it to `C:/Code/foo/bar.ps1` before passing to `pwsh.exe -File`.
+
+**Example:**
+```bash
+# ✗ These will fail:
+pwsh.exe -File "/mnt/c/Code/scripts/helper.ps1"
+pwsh.exe -File "$USERPROFILE\.claude\skills\helper.ps1"
+
+# ✓ This works:
+pwsh.exe -File "C:/Code/scripts/helper.ps1"
+pwsh.exe -File "$USERPROFILE_WIN/.claude/skills/helper.ps1"
+```
+
+@CLAUDE-template.md --exclude "## Technology Choices"
 

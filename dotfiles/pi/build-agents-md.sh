@@ -6,8 +6,54 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 OUT="$DIR/AGENTS.md"
 
+# Strip markdown sections by heading from expanded content.
+# Usage: echo "$content" | strip_sections "## Heading One" "## Heading Two" ...
+# Removes each matched heading and everything up to the next heading
+# at the same or higher level (or EOF).
+strip_sections() {
+    local excludes=("$@")
+    [ ${#excludes[@]} -eq 0 ] && cat && return
+
+    local skipping=false
+    local skip_level=0
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Strip trailing CR for consistent matching
+        local clean="${line%$'\r'}"
+
+        # Check if this line is a markdown heading
+        if [[ "$clean" =~ ^(#{1,6})[[:space:]] ]]; then
+            local hashes="${BASH_REMATCH[1]}"
+            local level=${#hashes}
+
+            if $skipping; then
+                # Stop skipping when we hit a heading at same or higher level
+                if [ "$level" -le "$skip_level" ]; then
+                    skipping=false
+                fi
+            fi
+
+            if ! $skipping; then
+                # Check if this heading matches any exclude pattern
+                for ex in "${excludes[@]}"; do
+                    if [ "$clean" = "$ex" ]; then
+                        skipping=true
+                        skip_level=$level
+                        break
+                    fi
+                done
+            fi
+        fi
+
+        if ! $skipping; then
+            echo "$line"
+        fi
+    done
+}
+
 # Recursively expand @filename.md references in a file.
 # Tracks visited files to prevent circular includes.
+# Supports --exclude "## Heading" on @include lines to strip sections.
 expand_file() {
     local file="$1"
     local base_dir
@@ -27,12 +73,27 @@ expand_file() {
     visited+=("$real_path")
 
     while IFS= read -r line || [ -n "$line" ]; do
-        # Match lines that are just @filename.md (with optional leading whitespace)
-        if [[ "$line" =~ ^[[:space:]]*@([A-Za-z0-9_/.:-]+\.md)[[:space:]]*$ ]]; then
+        # Match lines that are @filename.md with optional --exclude flags
+        if [[ "$line" =~ ^[[:space:]]*@([A-Za-z0-9_/.:-]+\.md)(.*)?$ ]]; then
             local ref="${BASH_REMATCH[1]}"
+            local rest="${BASH_REMATCH[2]}"
             local ref_path="$base_dir/$ref"
+
+            # Parse --exclude "## Heading" flags from the rest of the line
+            local -a excludes=()
+            local parse_rest="$rest"
+            local exclude_re='--exclude[[:space:]]+"([^"]*)"(.*)'
+            while [[ "$parse_rest" =~ $exclude_re ]]; do
+                excludes+=("${BASH_REMATCH[1]}")
+                parse_rest="${BASH_REMATCH[2]}"
+            done
+
             if [ -f "$ref_path" ]; then
-                expand_file "$ref_path" "${visited[@]}"
+                if [ ${#excludes[@]} -gt 0 ]; then
+                    expand_file "$ref_path" "${visited[@]}" | strip_sections "${excludes[@]}"
+                else
+                    expand_file "$ref_path" "${visited[@]}"
+                fi
             else
                 echo "<!-- WARNING: $ref not found, skipping -->"
                 echo "$line"
