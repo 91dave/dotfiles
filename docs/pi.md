@@ -13,6 +13,8 @@ All pi-related dotfiles live under `dotfiles/pi/` and install to `~/.pi/agent/`:
 | `build-agents-md.sh` | Script to regenerate `AGENTS.md` from `template.md` and its `@include` references |
 | `extensions/subagent/index.ts` | Custom subagent tool — delegates tasks to specialised agents in isolated context windows |
 | `extensions/subagent/agents.ts` | Agent discovery logic (reads from `~/.pi/agent/agents/` and `agentDirs` in settings) |
+| `extensions/permission-gate.ts` | Prompts for confirmation before running gated bash commands (configured via `permissionGate` in settings) |
+| `extensions/reset-title-on-exit.ts` | Resets terminal title on exit (pi sets it but doesn't clear it) |
 
 ## System Prompt Workflow
 
@@ -41,12 +43,30 @@ Update these to match the local path of your `docs-claude-helpers` clone.
 
 ## Extensions
 
-The `subagent` extension is a custom pi tool that spawns isolated `pi` subprocesses to handle parallel, sequential (chain), or single delegated tasks. It is loaded automatically from `~/.pi/agent/extensions/subagent/`.
+### subagent
+
+A custom pi tool that spawns isolated `pi` subprocesses to handle parallel, sequential (chain), or single delegated tasks. It is loaded automatically from `~/.pi/agent/extensions/subagent/`.
 
 It reads agent definitions (`.md` files with frontmatter) from:
 1. `~/.pi/agent/agents/` — personal user agents
 2. `.pi/agents/` — project-local agents (opt-in per invocation)
 3. Any directories listed in `agentDirs` in `settings.json`
+
+### permission-gate
+
+Prompts for user confirmation before executing gated bash commands. Configured via the `permissionGate` array in `settings.json`:
+
+```json
+"permissionGate": [
+  { "pattern": "\\bgit(?:\\.exe)?\\b.*\\bpush\\b", "label": "git push" }
+]
+```
+
+Each entry has:
+- **`pattern`** — a regex tested against the bash command string
+- **`label`** — a human-readable name shown in the confirmation prompt
+
+To gate additional commands, add more entries to the array (e.g. `rm -rf`, `kubectl delete`, deployment scripts). If no UI is available (e.g. headless/piped mode), gated commands are blocked outright.
 
 ## Installing
 
