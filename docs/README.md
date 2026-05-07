@@ -3,7 +3,7 @@
 Comprehensive documentation for all helper functions and aliases in `/dotfiles/lib`.
 
 - [AWS Helpers](aws.md)
-- [Development Helpers](dev.md)`
+- [Development Helpers](dev.md)
 - [Git & Worktree Management](git.md)
 - [Kubernetes Helpers](kubernetes.md)
 - [Telepresence Helpers](telepresence.md)
