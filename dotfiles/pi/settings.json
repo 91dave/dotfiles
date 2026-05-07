@@ -15,5 +15,8 @@
     "/mnt/c/Code/_docs/docs-claude-helpers/agents"
   ],
   "agentModel": "claude-sonnet-4",
-  "enableSkillCommands": true
+  "enableSkillCommands": true,
+  "permissionGate": [
+    { "pattern": "\\bgit(?:\\.exe)?\\b.*\\bpush\\b", "label": "git push" }
+  ]
 }
