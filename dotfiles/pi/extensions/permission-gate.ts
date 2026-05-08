@@ -56,11 +56,11 @@ export default function (pi: ExtensionAPI) {
     }
 
     const choice = await ctx.ui.select(
-      `🔒 Permission required: ${match.label}\n\n  ${command}\n\nAllow?`,
-      ["Yes", "No"]
+      `⚠️  Permission Gate — ${match.label}\n\n  ${command}\n\nAllow this command?`,
+      ["Yes, allow", "No, block"]
     );
 
-    if (choice !== "Yes") {
+    if (choice !== "Yes, allow") {
       return { block: true, reason: `${match.label} blocked by user` };
     }
 

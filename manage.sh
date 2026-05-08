@@ -25,6 +25,8 @@ case "$1" in
         cp ~/.pi/agent/extensions/subagent/agents.ts dotfiles/pi/extensions/subagent/
         cp ~/.pi/agent/extensions/reset-title-on-exit.ts dotfiles/pi/extensions/
         cp ~/.pi/agent/extensions/permission-gate.ts dotfiles/pi/extensions/
+        cp ~/.pi/agent/extensions/readonly-mode/index.ts dotfiles/pi/extensions/readonly-mode/
+        cp ~/.pi/agent/extensions/readonly-mode/utils.ts dotfiles/pi/extensions/readonly-mode/
         rm -rf dotfiles/pi/skills
         cp -r ~/.pi/agent/skills dotfiles/pi/skills
 
@@ -58,6 +60,9 @@ case "$1" in
             cp pi/extensions/subagent/agents.ts ~/.pi/agent/extensions/subagent/
             cp pi/extensions/reset-title-on-exit.ts ~/.pi/agent/extensions/
             cp pi/extensions/permission-gate.ts ~/.pi/agent/extensions/
+            mkdir -p ~/.pi/agent/extensions/readonly-mode
+            cp pi/extensions/readonly-mode/index.ts ~/.pi/agent/extensions/readonly-mode/
+            cp pi/extensions/readonly-mode/utils.ts ~/.pi/agent/extensions/readonly-mode/
             cp -r pi/skills ~/.pi/agent/
 
             # bin
