@@ -5,6 +5,7 @@ You are a model running in the pi-coding-agent harness. You are running under WS
 - use `podman.exe` instead of `docker` for all container operations
 - use `dotnet.exe` not `dotnet`
 - use `git.exe` not `git`
+    - always run `git.exe commit` and `git.exe push` as separate commands
 - use `gh.exe` not `gh`
 - use `pwsh.exe` not `pwsh`
 - use `rg` (ripgrep) instead of `grep` for fast recursive text search
@@ -56,6 +57,25 @@ repo-find --list terraform
 ```
 
 **Workflow:** `repo-find <term>` → disambiguate if needed → `cd` to path before working.
+
+## ripgrep (`rg`) and `fd` Gotchas
+
+**`rg` is not `grep` — flags differ in important ways:**
+
+- **`-r` means `--replace`, NOT recursive.** `rg` is recursive by default. Using `rg -rn "pattern"` replaces every match with the letter `n` in the output, producing garbled results. Use `rg -n` for line numbers.
+- **No `--include` flag.** Use `-g`/`--glob` for file type filtering (e.g. `-g "*.tf"`).
+- **No `-R` flag.** Recursion is always on; use `--max-depth` to limit it.
+
+```bash
+# ✗ Common mistakes (grep habits):
+rg -rn "pattern"              # Replaces matches with 'n' in output!
+rg --include "*.tf" "pattern"  # Unknown flag
+
+# ✓ Correct ripgrep usage:
+rg -n "pattern"               # Recursive search with line numbers
+rg -n "pattern" -g "*.tf"     # Filter to .tf files
+rg -l "pattern"               # List matching files only
+```
 
 ## WSL ↔ Windows Path Handling for `.exe` Commands
 
