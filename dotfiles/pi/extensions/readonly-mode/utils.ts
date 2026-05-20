@@ -9,6 +9,13 @@
  * - "safe"        — all segments use allowlisted read-only commands
  * - "destructive" — any segment uses a blocklisted command or redirect
  * - "unknown"     — none matched either list; the caller decides (prompt or block)
+ *
+ * Configuration (in ~/.pi/agent/settings.json under "readonlyMode"):
+ *   "safeCommands"        — additional command names to treat as safe
+ *   "safePrefixes"        — additional command prefixes to treat as safe
+ *   "safeSubcommands"     — additional {cmd, subs} rules for safe command+subcommand pairs
+ *   "destructiveCommands" — additional command names to treat as destructive
+ *   "destructivePrefixes" — additional command prefixes to treat as destructive
  */
 
 // --- Destructive command names (single-word) ---
@@ -41,7 +48,7 @@ const DESTRUCTIVE_SUBCOMMANDS: Array<{ cmd: string; subs: RegExp }> = [
 const DESTRUCTIVE_GIT_BRANCH = /^-[dD]/;
 
 // --- Safe command names ---
-const SAFE_COMMANDS = new Set([
+const DEFAULT_SAFE_COMMANDS = new Set([
 	"cat", "head", "tail", "less", "more",
 	"grep", "find", "ls", "pwd",
 	"echo", "printf", "wc", "sort", "uniq",
@@ -67,7 +74,7 @@ const SAFE_SUBCOMMANDS: Array<{ cmd: string; subs: RegExp }> = [
 ];
 
 // Safe if the command starts with these prefixes
-const SAFE_PREFIXES = [
+const DEFAULT_SAFE_PREFIXES = [
 	"cli-anything",
 	"wget -O -", // wget to stdout only
 ];
@@ -126,6 +133,60 @@ function extractCommand(segment: string): { cmd: string; firstArg: string; secon
 export type CommandSafety = "safe" | "destructive" | "unknown";
 
 /**
+ * User-configurable overrides loaded from settings.json "readonlyMode" key.
+ */
+export interface ReadonlyCommandConfig {
+	safeCommands?: string[];
+	safePrefixes?: string[];
+	safeSubcommands?: Array<{ cmd: string; subs: string[] }>;
+	destructiveCommands?: string[];
+	destructivePrefixes?: string[];
+}
+
+// Resolved (merged) sets built from defaults + user config
+let resolvedSafeCommands: Set<string> = DEFAULT_SAFE_COMMANDS;
+let resolvedSafePrefixes: string[] = DEFAULT_SAFE_PREFIXES;
+let resolvedSafeSubcommands: typeof SAFE_SUBCOMMANDS = SAFE_SUBCOMMANDS;
+let resolvedDestructiveCommands: Set<string> = DESTRUCTIVE_COMMANDS;
+let resolvedDestructivePrefixes: string[] = [];
+
+/**
+ * Apply user configuration to extend the built-in command lists.
+ * Call once at startup after reading settings.json.
+ */
+export function applyCommandConfig(config: ReadonlyCommandConfig): void {
+	// Safe commands
+	resolvedSafeCommands = new Set(DEFAULT_SAFE_COMMANDS);
+	if (config.safeCommands) {
+		for (const cmd of config.safeCommands) resolvedSafeCommands.add(cmd);
+	}
+
+	// Safe prefixes
+	resolvedSafePrefixes = [...DEFAULT_SAFE_PREFIXES];
+	if (config.safePrefixes) {
+		resolvedSafePrefixes.push(...config.safePrefixes);
+	}
+
+	// Safe subcommands
+	resolvedSafeSubcommands = [...SAFE_SUBCOMMANDS];
+	if (config.safeSubcommands) {
+		for (const rule of config.safeSubcommands) {
+			const pattern = new RegExp(`^(${rule.subs.join("|")})$`, "i");
+			resolvedSafeSubcommands.push({ cmd: rule.cmd, subs: pattern });
+		}
+	}
+
+	// Destructive commands
+	resolvedDestructiveCommands = new Set(DESTRUCTIVE_COMMANDS);
+	if (config.destructiveCommands) {
+		for (const cmd of config.destructiveCommands) resolvedDestructiveCommands.add(cmd);
+	}
+
+	// Destructive prefixes
+	resolvedDestructivePrefixes = config.destructivePrefixes ?? [];
+}
+
+/**
  * Classify a single segment as safe, destructive, or unknown.
  */
 function classifySegment(segment: string): CommandSafety {
@@ -140,7 +201,7 @@ function classifySegment(segment: string): CommandSafety {
 	// --- Destructive checks ---
 
 	// Single-word destructive commands (including sudo/su which extractCommand skips through)
-	if (DESTRUCTIVE_COMMANDS.has(cmdLower)) return "destructive";
+	if (resolvedDestructiveCommands.has(cmdLower)) return "destructive";
 
 	// Multi-word destructive (command + subcommand)
 	for (const rule of DESTRUCTIVE_SUBCOMMANDS) {
@@ -164,20 +225,23 @@ function classifySegment(segment: string): CommandSafety {
 		return "destructive";
 	}
 
+	// Destructive prefixes (user-configured)
+	if (resolvedDestructivePrefixes.some((p) => segment.startsWith(p))) return "destructive";
+
 	// --- Safe checks ---
 
 	// Single-word safe commands
-	if (SAFE_COMMANDS.has(cmdLower)) return "safe";
+	if (resolvedSafeCommands.has(cmdLower)) return "safe";
 
 	// Multi-word safe (command + subcommand)
-	for (const rule of SAFE_SUBCOMMANDS) {
+	for (const rule of resolvedSafeSubcommands) {
 		if (cmdLower === rule.cmd.toLowerCase() && rule.subs.test(firstArg)) {
 			return "safe";
 		}
 	}
 
 	// Safe prefixes
-	if (SAFE_PREFIXES.some((p) => segment.startsWith(p))) return "safe";
+	if (resolvedSafePrefixes.some((p) => segment.startsWith(p))) return "safe";
 
 	return "unknown";
 }

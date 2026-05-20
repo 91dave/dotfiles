@@ -18,22 +18,54 @@
  * - "readonlyMode" in settings.json to set the default
  *
  * Settings (in ~/.pi/agent/settings.json):
- *   "readonlyMode": true     // start in readonly mode by default
+ *   "readonlyMode": true     // start in readonly mode by default (legacy boolean form)
+ *   "readonlyMode": {        // object form with command configuration
+ *     "enabled": true,       // start in readonly mode by default
+ *     "safeCommands": [],    // additional command names treated as safe
+ *     "safePrefixes": [],    // additional command prefixes treated as safe
+ *     "safeSubcommands": [], // additional {cmd, subs[]} rules for safe cmd+subcommand
+ *     "destructiveCommands": [],  // additional command names treated as destructive
+ *     "destructivePrefixes": []   // additional command prefixes treated as destructive
+ *   }
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { classifyCommand } from "./utils.js";
+import { classifyCommand, applyCommandConfig } from "./utils.js";
+import type { ReadonlyCommandConfig } from "./utils.js";
 
-function getSettingsDefault(): boolean {
+interface ReadonlySettings {
+	enabled: boolean;
+	commandConfig: ReadonlyCommandConfig;
+}
+
+function getReadonlySettings(): ReadonlySettings {
 	try {
 		const settingsPath = join(homedir(), ".pi", "agent", "settings.json");
 		const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
-		return settings.readonlyMode === true;
+		const rm = settings.readonlyMode;
+
+		// Support both boolean (legacy) and object forms
+		if (rm === true) {
+			return { enabled: true, commandConfig: {} };
+		}
+		if (rm && typeof rm === "object") {
+			return {
+				enabled: rm.enabled === true,
+				commandConfig: {
+					safeCommands: rm.safeCommands,
+					safePrefixes: rm.safePrefixes,
+					safeSubcommands: rm.safeSubcommands,
+					destructiveCommands: rm.destructiveCommands,
+					destructivePrefixes: rm.destructivePrefixes,
+				},
+			};
+		}
+		return { enabled: false, commandConfig: {} };
 	} catch {
-		return false;
+		return { enabled: false, commandConfig: {} };
 	}
 }
 
@@ -180,6 +212,10 @@ The user will disable readonly mode when they are ready for you to make changes.
 	// --- Session lifecycle ---
 
 	pi.on("session_start", async (_event, ctx) => {
+		// Load command configuration from settings.json
+		const readonlySettings = getReadonlySettings();
+		applyCommandConfig(readonlySettings.commandConfig);
+
 		// Priority: CLI flag > persisted state > settings.json default
 		if (pi.getFlag("readonly") === true) {
 			readonlyEnabled = true;
@@ -199,7 +235,7 @@ The user will disable readonly mode when they are ready for you to make changes.
 				readonlyEnabled = stateEntry.data.enabled;
 			} else {
 				// No persisted state and no flag — check settings.json
-				readonlyEnabled = getSettingsDefault();
+				readonlyEnabled = readonlySettings.enabled;
 			}
 		}
 

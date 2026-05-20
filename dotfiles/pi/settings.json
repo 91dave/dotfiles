@@ -6,7 +6,7 @@
     "/mnt/c/Code/_docs/docs-claude-helpers/skills/review-pr-comments/SKILL.md",
     "!**/README.md"
   ],
-  "lastChangelogVersion": "0.75.3",
+  "lastChangelogVersion": "0.75.4",
   "defaultProvider": "github-copilot",
   "defaultModel": "claude-opus-4.6",
   "defaultThinkingLevel": "medium",
@@ -24,5 +24,24 @@
       "pattern": "\\bgit(?:\\.exe)?\\b.*\\bpush\\b",
       "label": "git push"
     }
-  ]
+  ],
+  "readonlyMode": {
+    "enabled": false,
+    "safeCommands": [
+      "cli-anything-icepanel",
+      "cli-anything-azdo"
+    ],
+    "safePrefixes": [],
+    "safeSubcommands": [
+      {
+        "cmd": "web",
+        "subs": [
+          "fetch",
+          "search"
+        ]
+      }
+    ],
+    "destructiveCommands": [],
+    "destructivePrefixes": []
+  }
 }
