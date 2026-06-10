@@ -64,13 +64,28 @@ Review all changes and determine whether they should be **one commit or multiple
 
 Keep commits small (aim for <10 files, ~200 lines each). When in doubt, fewer commits is fine.
 
-### 3b: Stage and commit
+### 3b: Determine co-authoring
+
+By default, co-author commits with `Co-authored-by: claude <claude@amdigital.co.uk>`
+(per the standard guardrails).
+
+**Exception:** if a repo-level agent file (`AGENTS.md`, `CLAUDE.md`, or `.claude/CLAUDE.md`
+in the repo root) opts out of co-authoring — e.g. phrases like "do not co-author", "no
+co-authoring", or "personal project" — **omit the trailer** for this repo. (You may
+already have read these files in Step 2b; reuse that.)
+
+### 3c: Stage and commit
 
 For each logical group:
 
 ```bash
+# With co-authoring (default):
 git.exe add <files>
 git.exe commit -m "{type}({ticket}): {description}" --trailer "Co-authored-by: claude <claude@amdigital.co.uk>"
+
+# When the repo opts out (Step 3b), drop the --trailer:
+git.exe add <files>
+git.exe commit -m "{type}({ticket}): {description}"
 ```
 
 **Commit message format:** `{type}(AB#{id}): {short-description}`
@@ -79,7 +94,7 @@ git.exe commit -m "{type}({ticket}): {description}" --trailer "Co-authored-by: c
 - Types: `feat`, `fix`, `refactor`, `style`, `ci`, `chore`, `docs`, `build`, `reg`
 - Choose the type based on the nature of the changes
 
-### 3c: Run linting (if available)
+### 3d: Run linting (if available)
 
 Before finalising, check for lint commands:
 

@@ -22,7 +22,19 @@ If `repo-find` returns multiple matches, ask the user to disambiguate.
 ./manage.sh get
 ```
 
-This copies dotfiles from their live locations into the repo working tree.
+This copies the **copy-based** config from its live locations into the repo working
+tree: shell prefs, dircolors/vimrc/screenrc, the `claude` and `pi` settings, pi
+extensions, `bin`, and `lib`.
+
+It deliberately does **not** touch `agents/template.md` or `agents/skills/` — those are
+symlinked into `~/.claude` and `~/.pi/agent`, so the repo is already the source of truth
+and any edits show up as working-tree changes without `get`. Don't expect `get` to
+surface them.
+
+**Out of scope:** the home skill folders also contain symlinks pointing into the separate
+`docs-claude-helpers` repo (the work skills and `CLAUDE-template.md`). Those belong to
+that repo — never copy or commit them here. Only `agents/skills/` (your personal skills)
+is part of dotfiles.
 
 ### 3. Analyse changes
 
@@ -35,7 +47,20 @@ git.exe diff
 - If there are **no changes**, inform the user and stop.
 - Summarise what changed in plain language (group by theme: shell config, editor settings, tool config, etc.).
 
-### 4. Commit and push
+### 4. Rebuild agent files if their sources changed
+
+The home `CLAUDE.md` / `AGENTS.md` are **generated** from `agents/template.md` and are not
+stored in the repo. If the diff touches `agents/template.md`, or a skill was **added or
+removed** under `agents/skills/`, regenerate them and refresh the skill symlinks:
+
+```bash
+bash agents/sync-agents.sh
+```
+
+Editing an *existing* skill's `SKILL.md` needs no rebuild — the home symlink already
+points at it.
+
+### 5. Commit and push
 
 - Stage all changes: `git.exe add -A`
 - Write a conventional commit message:
@@ -44,13 +69,13 @@ git.exe diff
   - If changes span unrelated areas, consider multiple small commits
 - Push: `git.exe push`
 
-### 5. Evaluate documentation impact
+### 6. Evaluate documentation impact
 
 After committing, review the diff and consider whether the changes are **significant enough to warrant documentation updates** — for example:
 
 - New tools or CLI utilities added to PATH / aliases
 - Changed environment variables or shell behaviour
-- New or removed pi skills, agents, or settings
+- New or removed **shared agent skills** (`agents/skills/`) or changes to the **agent template** (`agents/template.md`)
 - Meaningful changes to editor or terminal configuration
 
 If any apply, **suggest specific documentation updates** to the user (e.g. "You added a new pi skill — consider updating your team onboarding notes" or "New shell aliases were added — the dotfiles README may need updating").

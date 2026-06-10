@@ -1,23 +1,17 @@
 {
   "skills": [
-    "/mnt/c/Code/_docs/docs-claude-helpers/skills",
-    "/mnt/c/Code/_docs/docs-claude-helpers/skills/qtx-regressions/SKILL.md",
-    "/mnt/c/Code/_docs/docs-claude-helpers/skills/remember/SKILL.md",
-    "/mnt/c/Code/_docs/docs-claude-helpers/skills/review-pr-comments/SKILL.md",
-    "!**/README.md"
   ],
-  "lastChangelogVersion": "0.75.4",
+  "lastChangelogVersion": "0.78.1",
   "defaultProvider": "github-copilot",
   "defaultModel": "claude-opus-4.6",
   "defaultThinkingLevel": "medium",
   "theme": "dark",
   "quietStartup": true,
-  "hideThinkingBlock": false,
+  "hideThinkingBlock": true,
   "packages": [],
   "agentDirs": [
     "/mnt/c/Code/_docs/docs-claude-helpers/agents"
   ],
-  "agentModel": "claude-sonnet-4",
   "enableSkillCommands": true,
   "permissionGate": [
     {

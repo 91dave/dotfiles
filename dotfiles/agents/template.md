@@ -1,6 +1,6 @@
 # Coding Agent Environment
 
-You are a model running in the pi-coding-agent harness. You are running under WSL on a windows system. Use linux commands as usual with the following exceptions:
+You are a model running in {{HARNESS}}. You are running under WSL on a windows system. Use linux commands as usual with the following exceptions:
 
 - use `podman.exe` instead of `docker` for all container operations
 - use `dotnet.exe` not `dotnet`
@@ -9,7 +9,7 @@ You are a model running in the pi-coding-agent harness. You are running under WS
 - use `gh.exe` not `gh`
 - use `pwsh.exe` not `pwsh`
 - use `rg` (ripgrep) instead of `grep` for fast recursive text search
-- use `fd` instead of `find` for fast file finding
+- use `fdfind` instead of `find` for fast file finding
 
 ## Additional Tools
 
@@ -75,6 +75,59 @@ rg --include "*.tf" "pattern"  # Unknown flag
 rg -n "pattern"               # Recursive search with line numbers
 rg -n "pattern" -g "*.tf"     # Filter to .tf files
 rg -l "pattern"               # List matching files only
+```
+
+## Looking Up Source for Third-Party / NuGet / Internal Package Code
+
+When you need to read the source of a type that lives in a NuGet package, an internal shared library, or any other dependency that is not in the current repo:
+
+- **Do not** rummage through `~/.nuget`, `bin/`, `obj/`, or decompile DLLs. Compiled binaries are noisy and the symbol names rarely line up cleanly with the source.
+- **Do** locate the source repo and read the `.cs` / `.ts` / etc. directly.
+
+Preferred order:
+
+1. **`gh search code`** — find the type, member, or string across the GitHub org. This works for internal `qtpkg-*` packages and any other repos you have access to.
+   ```bash
+   gh.exe search code --owner amdigital-co-uk "class WebsiteInfoModule"
+   gh.exe search code --owner amdigital-co-uk --filename "WebsiteInfoModule.cs"
+   ```
+2. **`repo-find <name>`** — once you know the repo, check whether it's already cloned locally and `cd` to it for fast `rg` / `read` access.
+   ```bash
+   repo-find qtpkg-core
+   ```
+3. **`gh.exe api`** — if the repo isn't on disk and cloning is overkill, fetch the specific file via the GitHub API rather than cloning.
+   ```bash
+   gh.exe api repos/amdigital-co-uk/qtpkg-core/contents/path/to/File.cs --jq .content | base64 -d
+   ```
+
+**Trigger:** any time a stack trace, type name, or behavioural question points at code outside the current repo (e.g. `Quartex.Common.*`, `Quartex.Core.*`, third-party middleware).
+
+## Commenting Policy
+
+Be very sparing with adding comments, regardless of code/file type. Comments should explain WHY not HOW, and should only be used for genuinely non-obvious scenarios. Prefer a single
+comment at the top of a file or method rather than in-line. The best comment is no comment at all.
+
+## Capturing Output From Long-Running Commands
+
+When inspecting only the head/tail of a build or test run, **`tee` the full
+output to a file first** so you don't have to re-run the command for more
+context.
+
+- `| tail -n40` discards everything else — if the tail references an earlier
+  error, you're forced to re-run (often a multi-minute build).
+- `tee` keeps the full log on disk for cheap follow-up with `rg` or `less`.
+- Use `/tmp` for the log file; redirect stderr with `2>&1` for build tools.
+
+```bash
+# ✗ Loses output:
+dotnet.exe build | tail -n40
+
+# ✓ Full log captured, tail shown inline:
+dotnet.exe build 2>&1 | tee /tmp/build.log | tail -n40
+npm test       2>&1 | tee /tmp/test.log  | tail -n40
+
+# Follow up without re-running:
+rg -n "error|FAIL" /tmp/build.log
 ```
 
 ## WSL ↔ Windows Path Handling for `.exe` Commands

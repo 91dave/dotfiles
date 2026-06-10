@@ -19,16 +19,14 @@ case "$1" in
 
         # pi
         cp ~/.pi/agent/settings.json dotfiles/pi/
-        cp ~/.pi/agent/template.md dotfiles/pi/
-        cp ~/.pi/agent/build-agents-md.sh dotfiles/pi/
         cp ~/.pi/agent/extensions/subagent/index.ts dotfiles/pi/extensions/subagent/
         cp ~/.pi/agent/extensions/subagent/agents.ts dotfiles/pi/extensions/subagent/
         cp ~/.pi/agent/extensions/reset-title-on-exit.ts dotfiles/pi/extensions/
         cp ~/.pi/agent/extensions/permission-gate.ts dotfiles/pi/extensions/
         cp ~/.pi/agent/extensions/readonly-mode/index.ts dotfiles/pi/extensions/readonly-mode/
         cp ~/.pi/agent/extensions/readonly-mode/utils.ts dotfiles/pi/extensions/readonly-mode/
-        rm -rf dotfiles/pi/skills
-        cp -r ~/.pi/agent/skills dotfiles/pi/skills
+        # agents/template.md and agents/skills are the source of truth (symlinked outward
+        # by sync-agents.sh), so there is nothing to pull back here.
 
         # bin
         cp ~/.local/bin/repo-find dotfiles/bin/
@@ -54,8 +52,6 @@ case "$1" in
             # pi
             mkdir -p ~/.pi/agent/extensions/subagent
             cp pi/settings.json ~/.pi/agent/
-            cp pi/template.md ~/.pi/agent/
-            cp pi/build-agents-md.sh ~/.pi/agent/
             cp pi/extensions/subagent/index.ts ~/.pi/agent/extensions/subagent/
             cp pi/extensions/subagent/agents.ts ~/.pi/agent/extensions/subagent/
             cp pi/extensions/reset-title-on-exit.ts ~/.pi/agent/extensions/
@@ -63,7 +59,9 @@ case "$1" in
             mkdir -p ~/.pi/agent/extensions/readonly-mode
             cp pi/extensions/readonly-mode/index.ts ~/.pi/agent/extensions/readonly-mode/
             cp pi/extensions/readonly-mode/utils.ts ~/.pi/agent/extensions/readonly-mode/
-            cp -r pi/skills ~/.pi/agent/
+
+            # agents: build CLAUDE.md + AGENTS.md and symlink personal + work skills
+            bash agents/sync-agents.sh
 
             # bin
             mkdir -p ~/.local/bin
