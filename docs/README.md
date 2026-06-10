@@ -8,6 +8,7 @@ Comprehensive documentation for all helper functions and aliases in `/dotfiles/l
 - [Kubernetes Helpers](kubernetes.md)
 - [Telepresence Helpers](telepresence.md)
 - [Terraform Helpers](terraform.md)
+- [Shared Agent Config](agents.md)
 - [pi-coding-agent Setup](pi.md)
 - [Todo List](todo.md)
 - [Standalone CLI Tools](tools.md)
