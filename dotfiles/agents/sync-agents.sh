@@ -15,6 +15,13 @@ TEMPLATE="$SCRIPT_DIR/template.md"
 CLAUDE_HOME="$HOME/.claude"
 PI_HOME="$HOME/.pi/agent"
 
+# Per-agent section exclusions: headings (exact-line match) to strip from one
+# agent's output so CLAUDE.md and AGENTS.md can diverge. Add a line per heading.
+CLAUDE_EXCLUDES=(
+    "### Web CLI (\`web\`)"   # Claude Code has built-in web search/fetch tools
+)
+AGENTS_EXCLUDES=()
+
 # Strip markdown sections by heading from expanded content.
 # Usage: echo "$content" | strip_sections "## Heading One" "## Heading Two" ...
 # Removes each matched heading and everything up to the next heading
@@ -175,10 +182,8 @@ link_skills() {
     echo "Linked skills into $dir ($(find "$dir" -maxdepth 1 -type l | wc -l) skills)"
 }
 
-# Claude has built-in web search/fetch tools, so drop the Web CLI section for it.
-build_for "Claude Code" "$CLAUDE_HOME/CLAUDE.md" \
-    "### Web CLI (\`web\`)"
-build_for "the pi-coding-agent harness" "$PI_HOME/AGENTS.md"
+build_for "Claude Code" "$CLAUDE_HOME/CLAUDE.md" "${CLAUDE_EXCLUDES[@]}"
+build_for "the pi-coding-agent harness" "$PI_HOME/AGENTS.md" "${AGENTS_EXCLUDES[@]}"
 
 link_skills "$CLAUDE_HOME/skills"
 link_skills "$PI_HOME/skills"
