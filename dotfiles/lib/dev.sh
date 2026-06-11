@@ -63,20 +63,23 @@ _cc_ensure_agents_bridge() {
 
 function cc() {
     _cc_ensure_agents_bridge
-    local folder=$(basename "$PWD")
-    local base="cc-$folder"
-    # Allow duplicates: pick the next free name (cc-foo, cc-foo-2, cc-foo-3...)
+
+    # Already inside tmux: run Claude in the current pane. Spawning a new session
+    # and switching to it would leave the session you're in detached.
+    if [ -n "$TMUX" ]; then
+        claude "$@"
+        return
+    fi
+
+    # Outside tmux: launch in a dedicated session named after the current folder,
+    # picking the next free name (cc-foo, cc-foo-2, ...) if one already exists.
+    local base="cc-$(basename "$PWD")"
     local name="$base" n=2
     while tmux has-session -t "=$name" 2>/dev/null; do
         name="$base-$n"
         ((n++))
     done
-    if [ -n "$TMUX" ]; then
-        # Already inside tmux: create a detached session and switch to it
-        tmux new-session -d -s "$name" claude "$@" && tmux switch-client -t "$name"
-    else
-        tmux new-session -s "$name" claude "$@"
-    fi
+    tmux new-session -s "$name" claude "$@"
 }
 
 
