@@ -45,6 +45,7 @@ Comprehensive documentation for all helper functions and aliases is available in
 
 **Quick reference:**
 - `aws_help` - AWS helpers
+- `cc [args]` - Launch Claude Code in a dedicated tmux session named after the current folder (requires tmux)
 - `ce <cmd>` - Container engine manager (check/fix/help)
 - `dev_help` - Development helpers
 - `gws <cmd>` - Workspace manager (cd/claude/edit/cmd)
