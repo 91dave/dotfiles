@@ -448,6 +448,13 @@ _repos_main() {
 
 _repos_edit() {
     local search="$1"
+
+    if [[ -z "$search" || "$search" == "." ]]; then
+        echo "🚀 Opening VS Code in current folder..."
+        cmd.exe /c code .
+        return
+    fi
+
     local repo=$(_repos_find "$search") || return 1
 
     local repo_path="$REPO_HOME/$repo"
