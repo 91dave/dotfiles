@@ -25,7 +25,44 @@ alias podman="podman.exe"
 alias dotnet="dotnet.exe"
 alias gh="gh.exe"
 
+# Claude Code only reads CLAUDE.md, not the cross-tool AGENTS.md. If the folder
+# has an AGENTS.md, drop a CLAUDE.md that imports it and keep that bridge out of
+# git via the local exclude file. Pure bash + wslpath — never calls git, so it
+# behaves the same on /mnt/c and WSL-native paths, and on worktrees.
+_cc_ensure_agents_bridge() {
+    [ -f AGENTS.md ] || return 0
+
+    if [ ! -f CLAUDE.md ]; then
+        echo "@AGENTS.md" > CLAUDE.md
+        echo "🔗 cc: created CLAUDE.md -> @AGENTS.md"
+    elif ! grep -qxF "@AGENTS.md" CLAUDE.md; then
+        return 0   # a real, hand-written CLAUDE.md — leave it (and don't ignore it)
+    fi
+
+    # Locate the git exclude file. Normal repo: .git/info/exclude. Worktree: .git
+    # is a file pointing at the gitdir; commondir locates the shared exclude.
+    local exclude=""
+    if [ -d .git ]; then
+        exclude=".git/info/exclude"
+    elif [ -f .git ]; then
+        local gitdir
+        gitdir=$(sed -n 's/^gitdir: //p' .git | tr -d '\r')
+        [ -d "$gitdir" ] || gitdir=$(wslpath "$gitdir" 2>/dev/null)
+        if [ -d "$gitdir" ]; then
+            exclude=$(cd "$gitdir" && cd "$(tr -d '\r' < commondir 2>/dev/null || echo .)" && echo "$PWD/info/exclude")
+        fi
+    fi
+    [ -n "$exclude" ] || return 0
+
+    mkdir -p "$(dirname "$exclude")"
+    grep -qE '^/?CLAUDE\.md$' "$exclude" 2>/dev/null || {
+        echo "/CLAUDE.md" >> "$exclude"
+        echo "🙈 cc: ignored /CLAUDE.md via git exclude (local, untracked)"
+    }
+}
+
 function cc() {
+    _cc_ensure_agents_bridge
     local folder=$(basename "$PWD")
     local base="cc-$folder"
     # Allow duplicates: pick the next free name (cc-foo, cc-foo-2, cc-foo-3...)
