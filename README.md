@@ -45,7 +45,7 @@ Comprehensive documentation for all helper functions and aliases is available in
 
 **Quick reference:**
 - `aws_help` - AWS helpers
-- `cc [args]` - Launch Claude Code in a dedicated tmux session named after the current folder (requires tmux)
+- `cc [args]` - Launch Claude Code in a dedicated tmux session named after the current folder (requires tmux). If the folder has an `AGENTS.md`, auto-creates a `CLAUDE.md` importing it (`@AGENTS.md`) and hides that bridge via the local git exclude so Claude reads the repo's agent instructions without dirtying the tree
 - `ce <cmd>` - Container engine manager (check/fix/help)
 - `dev_help` - Development helpers
 - `gws <cmd>` - Workspace manager (cd/claude/edit/cmd)
