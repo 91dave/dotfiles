@@ -3,7 +3,7 @@
 bash_debug "Loading daily-tips.sh"
 
 ## Daily tips - shown once per day on shell startup
-SHOW_DAILY_TIPS=true
+SHOW_DAILY_TIPS=false
 
 _show_daily_tips() {
     local marker_file="$HOME/.cache/daily-tips-date"
