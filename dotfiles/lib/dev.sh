@@ -24,7 +24,23 @@ alias docker-compose="podman.exe compose"
 alias podman="podman.exe"
 alias dotnet="dotnet.exe"
 alias gh="gh.exe"
-alias cc="claude.exe"
+
+function cc() {
+    local folder=$(basename "$PWD")
+    local base="cc-$folder"
+    # Allow duplicates: pick the next free name (cc-foo, cc-foo-2, cc-foo-3...)
+    local name="$base" n=2
+    while tmux has-session -t "=$name" 2>/dev/null; do
+        name="$base-$n"
+        ((n++))
+    done
+    if [ -n "$TMUX" ]; then
+        # Already inside tmux: create a detached session and switch to it
+        tmux new-session -d -s "$name" claude "$@" && tmux switch-client -t "$name"
+    else
+        tmux new-session -s "$name" claude "$@"
+    fi
+}
 
 
 function _warn_dev_helper() {

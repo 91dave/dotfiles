@@ -76,6 +76,19 @@ function wslexe() {
 # Check WSL interop on interactive shell startup
 [[ $- == *i* ]] && wslexe check
 
+# Restore the terminal title in the outer shell. tmux owns the title while
+# attached (set-titles); this re-asserts it on every prompt once we're back
+# out, so detaching/exiting tmux resets it. Skipped inside tmux so it never
+# fights set-titles in the panes. Folder name only, matching the \W prompt.
+_set_term_title() {
+    [ -n "$TMUX" ] && return
+    local dir
+    [ "$PWD" = "$HOME" ] && dir="~" || dir="${PWD##*/}"
+    printf '\033]0;%s@%s: %s\007' "$USER" "${HOST_NICKNAME:-${HOSTNAME%%.*}}" "$dir"
+}
+[[ "$PROMPT_COMMAND" == *_set_term_title* ]] || \
+    PROMPT_COMMAND="_set_term_title${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+
 
 
 
