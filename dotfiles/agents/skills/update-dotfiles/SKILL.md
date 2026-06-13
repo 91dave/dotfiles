@@ -39,9 +39,9 @@ is part of dotfiles.
 ### 3. Analyse changes
 
 ```bash
-git.exe status
-git.exe diff --stat
-git.exe diff
+git status
+git diff --stat
+git diff
 ```
 
 - If there are **no changes**, inform the user and stop.
@@ -62,12 +62,12 @@ points at it.
 
 ### 5. Commit and push
 
-- Stage all changes: `git.exe add -A`
+- Stage all changes: `git add -A`
 - Write a conventional commit message:
   - Use type `chore` (or `feat` if new tooling/config is added)
   - Keep the subject line concise, e.g. `chore: update shell aliases and pi agent settings`
   - If changes span unrelated areas, consider multiple small commits
-- Push: `git.exe push`
+- Push: `git push`
 
 ### 6. Evaluate documentation impact
 

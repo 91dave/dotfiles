@@ -8,14 +8,12 @@ description: >
   backlog", "implement and review", or wants to pick up the next piece of work.
   Provide either a plan folder or a parent work item ID (AB#12345); the mode is
   auto-detected.
+argument-hint: "[<plan-folder>] [AB#<backlog-item-id>]"
 ---
 
 # Workflow: Implement and Review
 
-Pick the next task, implement it, then delegate an isolated review. This is the
-interactive, single-task counterpart to the `ralph` autonomous loop runner — it
-shares ralph's mode/agent vocabulary, so a plan folder behaves the same whether
-driven by hand here or in a loop with `ralph -s implement,review`.
+Pick the next task, implement it, then delegate an isolated review.
 
 **Arguments:** `$ARGUMENTS`
 
@@ -94,15 +92,15 @@ the user to verify manually before continuing.
 Once implementation is complete and all checks pass:
 
 ```bash
-git.exe add -A
-git.exe commit -m "<conventional-commit-message>"
+git add -A
+git commit -m "<conventional-commit-message>"
 ```
 
 Use conventional commit format. Apply the **commit reference** rule for the mode
 (`AB#{number}` in AzDo mode; in plan-folder mode use `PLAN.md`'s Backlog Item if
 it declares one, otherwise omit the reference — never invent a placeholder).
 
-Run `git.exe commit` and `git.exe push` as separate commands. Do not commit
+Run `git commit` and `git push` as separate commands. Do not commit
 directly to `main`; if on `main`, create a work branch first and tell the user.
 
 ---
@@ -110,7 +108,7 @@ directly to `main`; if on `main`, create a work branch first and tell the user.
 ## Phase 4: Isolated Review
 
 Spawn a subagent to review the changes with **no knowledge of the implementation
-reasoning** (ralph's step-context handoff). The subagent receives ONLY:
+reasoning**. The subagent receives ONLY:
 
 - The task identity (the `task-*.md` path in plan-folder mode, or the `AB#` and
   task title in AzDo mode) — i.e. *what was supposed to be done*.
@@ -124,7 +122,7 @@ Use this prompt for the subagent:
 >
 > **Context:** This commit implements the task "{task_identity}".
 >
-> Run `git.exe show --stat HEAD` and `git.exe show HEAD` to see the changes.
+> Run `git show --stat HEAD` and `git show HEAD` to see the changes.
 >
 > Check for:
 > - Code quality issues (naming, structure, duplication)
@@ -185,10 +183,10 @@ producer of these folders.
 ## Notes
 
 - Only work on **one task** per invocation. Run the skill again for the next task.
-- The plan-folder task format is the single source of truth shared with `ralph`'s
-  `taskfile` mode. If you find a plan folder whose task files use an older format
-  (inline `Status:`/`Priority:` rather than the blockquote + Completion Checklist
-  shape), flag it rather than guessing.
+- The plan-folder task format follows the `/plan-tasks` `TEMPLATES.md` conventions.
+  If you find a plan folder whose task files use an older format (inline
+  `Status:`/`Priority:` rather than the blockquote + Completion Checklist shape),
+  flag it rather than guessing.
 - If the parent work item or plan folder has no tasks, offer to break the work
   down first (point the user at `/plan-tasks`).
 - Never commit the `.plans/` directory to source control.
