@@ -5,6 +5,7 @@ description: >
   Determines whether main is acceptable or a work branch is required. Groups changes into
   logical commits with conventional commit messages. Use when the user says "ship it",
   "commit and push", "create a PR", or wants to wrap up current work.
+argument-hint: "[AB#<backlog-item-id>] [short description]"
 ---
 
 Ship the current working tree changes: branch, commit, push, and PR.
@@ -14,17 +15,22 @@ Ship the current working tree changes: branch, commit, push, and PR.
 ## Step 1: Check for Changes
 
 ```bash
-git.exe status --porcelain
+git status --porcelain
+git log --oneline @{u}.. 2>/dev/null   # commits ahead of upstream (if any)
 ```
 
-If there are **no changes** (working tree clean, nothing staged), inform the user and stop.
+Only stop if there is **nothing to commit AND nothing to push** — i.e. the working
+tree is clean (nothing staged or unstaged) *and* there are no local commits ahead of
+the upstream branch. If either condition has work outstanding, continue: a clean tree
+with unpushed commits still needs a push (and possibly a PR), so proceed to the relevant
+later steps. If both are empty, inform the user and stop.
 
 ## Step 2: Determine Branch Strategy
 
 ### 2a: Check if already on a work branch
 
 ```bash
-git.exe branch --show-current
+git branch --show-current
 ```
 
 If the current branch is NOT `main` (e.g. already on `work/...` or `feature/...`), skip to Step 3.
@@ -50,7 +56,7 @@ If committing to main is not permitted (the default), create a branch:
 Derive `{short-description}` from the nature of the changes (kebab-case, 3-5 words max).
 
 ```bash
-git.exe checkout -b "work/{branch-name}"
+git checkout -b "work/{branch-name}"
 ```
 
 ## Step 3: Commit Changes
@@ -80,12 +86,12 @@ For each logical group:
 
 ```bash
 # With co-authoring (default):
-git.exe add <files>
-git.exe commit -m "{type}({ticket}): {description}" --trailer "Co-authored-by: claude <claude@amdigital.co.uk>"
+git add <files>
+git commit -m "{type}({ticket}): {description}" --trailer "Co-authored-by: claude <claude@amdigital.co.uk>"
 
 # When the repo opts out (Step 3b), drop the --trailer:
-git.exe add <files>
-git.exe commit -m "{type}({ticket}): {description}"
+git add <files>
+git commit -m "{type}({ticket}): {description}"
 ```
 
 **Commit message format:** `{type}(AB#{id}): {short-description}`
@@ -105,26 +111,48 @@ Before finalising, check for lint commands:
 ## Step 4: Push
 
 ```bash
-git.exe push -u origin HEAD
+git push -u origin HEAD
 ```
 
-## Step 5: Create a Pull Request
+## Step 5: Create or Update a Pull Request
+
+First check whether a PR already exists for the current branch:
 
 ```bash
-gh.exe pr create --fill --head "$(git.exe branch --show-current)"
+gh pr view --json number,url,body 2>/dev/null
 ```
 
-If more context is available, provide a better title and body:
+### PR body format
+
+Write the body as a **brief summary** (one or two sentences) followed by **bullet points
+of the changes made**. Do **not** include:
+
+- IcePanel / architecture documentation notes
+- notes about the number of tests created or passed
+- a test / verification plan
+
+Include the BLI reference if available (e.g. `Relates to AB#35254`).
+
+### 5a: If no PR exists — create one
 
 ```bash
-gh.exe pr create \
+gh pr create \
   --title "{type}({ticket}): {description}" \
-  --body "{summary of changes}" \
-  --head "$(git.exe branch --show-current)"
+  --body "{summary + bullet points}" \
+  --head "$(git branch --show-current)"
 ```
 
-- Include the BLI reference in the PR body if available (e.g. `Relates to AB#35254`)
 - If targeting a branch other than main (e.g. a feature branch), add `--base {target}`
+
+### 5b: If a PR already exists — update its description
+
+Update the existing PR description so it also reflects the additional changes just
+pushed. Merge the new change bullets into the existing body (keep prior content, append
+the new bullets) rather than replacing it wholesale:
+
+```bash
+gh pr edit --body "{updated summary + combined bullet points}"
+```
 
 ## Step 6: Confirm
 
