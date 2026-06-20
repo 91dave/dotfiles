@@ -124,8 +124,17 @@ gh pr view --json number,url,body 2>/dev/null
 
 ### PR body format
 
-Write the body as a **brief summary** (one or two sentences) followed by **bullet points
-of the changes made**. Do **not** include:
+Scale the structure to the size of the change:
+
+- **Modest change** (one logical concern, a handful of files): a **brief summary** (one or
+  two sentences) followed by **bullet points of the changes made**.
+- **Larger change** (several distinct concerns, e.g. a migration plus hardening plus a CI
+  update): **split into sections with `##` headers**, where each section repeats the same
+  shape — a one-or-two-sentence summary followed by its own bullet points. Keep it a single
+  coherent description: group the bullets by concern under each header, do not append
+  per-commit fragments.
+
+Either way, do **not** include:
 
 - IcePanel / architecture documentation notes
 - notes about the number of tests created or passed
@@ -146,12 +155,14 @@ gh pr create \
 
 ### 5b: If a PR already exists — update its description
 
-Update the existing PR description so it also reflects the additional changes just
-pushed. Merge the new change bullets into the existing body (keep prior content, append
-the new bullets) rather than replacing it wholesale:
+Rewrite the description so it reads as a single coherent whole covering all the changes on
+the branch, including the ones just pushed — following the **PR body format** above (scaled
+to the overall size of the branch). Fold the new changes into the existing structure rather
+than appending per-commit fragments; if that pushes the change past "modest", restructure
+into `##` sections.
 
 ```bash
-gh pr edit --body "{updated summary + combined bullet points}"
+gh pr edit --body "{coherent summary + bullet points / sections}"
 ```
 
 ## Step 6: Confirm
