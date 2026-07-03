@@ -10,6 +10,7 @@ case "$1" in
         cp ~/.dircolors dotfiles/dircolors
         cp ~/.screenrc dotfiles/screenrc
         cp ~/.vimrc dotfiles/vimrc
+        cp ~/.tmux.conf dotfiles/tmux.conf
 
         #claude_windows="%USERPROFILE\.claude"
         claude_windows="C:\\Code\\_docs\docs-claude-helpers"
@@ -48,6 +49,7 @@ case "$1" in
             cp dircolors ~/.dircolors
             cp screenrc ~/.screenrc
             cp vimrc ~/.vimrc
+            cp tmux.conf ~/.tmux.conf
 
             # pi
             mkdir -p ~/.pi/agent/extensions/subagent
