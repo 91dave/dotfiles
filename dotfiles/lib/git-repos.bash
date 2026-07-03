@@ -9,7 +9,7 @@ _repos_help() {
     echo "  repos fetch        🔁 Fetch all repos and pull where possible"
     echo "  repos ls           📍 List repos not on main/master or with uncommitted changes"
     echo "  repos main         🔄 Switch all repos to main/master branch"
-    echo "  repos clear        🗑️  Delete branches merged into main/master"
+    echo "  repos clear        🗑️  Reset to main; delete branches with no unmerged work of yours"
     echo "  repos code <repo>  🚀 Open VS Code in matching repo"
     echo "  repos cmd <repo>   💻 Open WSL window in matching repo"
     echo "  repos cd <repo>    📂 pushd into matching repo"
@@ -178,10 +178,68 @@ _repos_fetch() {
     fi
 }
 
+# Emit the unmerged ('+') commit SHAs of a ref relative to the default branch on origin
+_repos_unmerged_shas() {
+    local default_branch="$1" ref="$2"
+    git.exe </dev/null cherry "origin/$default_branch" "$ref" 2>/dev/null | awk '/^\+/ { print $2 }'
+}
+
+# Succeed if any of the given commit SHAs was authored by the current git user.
+# An unknown local identity is treated as "mine" so nothing gets auto-deleted.
+_repos_authored_by_me() {
+    local me
+    me=$(git.exe </dev/null config user.email 2>/dev/null)
+    [[ -z "$me" ]] && return 0
+    [[ $# -eq 0 ]] && return 1
+    git.exe </dev/null show -s --format='%ae' "$@" 2>/dev/null | grep -qxF "$me"
+}
+
+# Succeed if the ref has unmerged commits authored by the current git user
+_repos_own_unmerged() {
+    local default_branch="$1" ref="$2"
+    local -a unmerged
+    mapfile -t unmerged < <(_repos_unmerged_shas "$default_branch" "$ref")
+    [[ ${#unmerged[@]} -eq 0 ]] && return 1
+    _repos_authored_by_me "${unmerged[@]}"
+}
+
+# Succeed if every commit on the ref already exists on some remote-tracking branch
+_repos_all_on_remote() {
+    [[ -z "$(git.exe </dev/null rev-list "$1" --not --remotes 2>/dev/null)" ]]
+}
+
+# Delete a local branch when nothing of yours would be lost: it is fully merged, or its
+# unmerged commits are someone else's and already on a remote. Prints the outcome and
+# returns 0 only when the branch is deleted; stays silent when it is your own unmerged work.
+_repos_clear_branch() {
+    local default_branch="$1" branch="$2"
+    local -a unmerged
+    mapfile -t unmerged < <(_repos_unmerged_shas "$default_branch" "$branch")
+
+    local reason
+    if [[ ${#unmerged[@]} -eq 0 ]]; then
+        reason="merged"
+    elif _repos_authored_by_me "${unmerged[@]}"; then
+        return 2
+    elif _repos_all_on_remote "$branch"; then
+        reason="others' unmerged work, safe on remote"
+    else
+        echo "   ⏭️  Kept: $branch (others' unmerged commits, not yet on a remote)"
+        return 1
+    fi
+
+    if git.exe </dev/null branch -D "$branch" >& /dev/null; then
+        echo "   ✅ Deleted: $branch ($reason)"
+        return 0
+    fi
+    echo "   ❌ Failed to delete: $branch"
+    return 1
+}
+
 _repos_clear() {
     local total_branches=0
 
-    echo "🗑️  Deleting merged branches..."
+    echo "🗑️  Clearing branches with no unmerged work of yours..."
     echo ""
 
     while read -r repo; do
@@ -203,29 +261,45 @@ _repos_clear() {
         local current_branch=$(git.exe </dev/null branch --show-current 2>/dev/null)
         local repo_printed=false
 
-        # Check if current branch is merged and switch to default if so
+        # Leave the current branch for main when it holds no unmerged work of yours.
+        # Only off-default repos need the working-tree status, so it is not computed otherwise.
         if [[ "$current_branch" != "$default_branch" ]]; then
-            local cherry=$(git.exe </dev/null cherry "origin/$default_branch" HEAD 2>/dev/null)
-            local has_unmerged=$(echo "$cherry" | grep -c '^+' || true)
+            local status=$(git.exe </dev/null status --porcelain 2>/dev/null)
 
-            if [[ "$has_unmerged" -eq 0 ]]; then
-                # Current branch is merged - check for uncommitted changes
-                local is_dirty=$(git.exe </dev/null status --porcelain 2>/dev/null)
-                if [[ -z "$is_dirty" ]]; then
-                    # Safe to switch and delete
-                    if git.exe </dev/null checkout "$default_branch" >& /dev/null; then
+            # Only a dirty tree can hold an untracked swap file. git status has already listed
+            # them, so pull the stale (>6h) ones from its output rather than walking the tree.
+            if [[ -n "$status" ]]; then
+                local now=$(date +%s) rel mtime
+                while IFS= read -r rel; do
+                    [[ "$rel" == *.swp ]] || continue
+                    mtime=$(stat -c %Y "$repo_path/$rel" 2>/dev/null) || continue
+                    (( now - mtime > 21600 )) || continue
+                    rm -f "$repo_path/$rel" 2>/dev/null || continue
+                    if [[ "$repo_printed" == false ]]; then
                         printf '\r\e[K'
                         echo "📁 $repo"
                         repo_printed=true
-                        echo "   🔄 Switched: $current_branch → $default_branch"
-                        if git.exe </dev/null branch -D "$current_branch" >& /dev/null; then
-                            echo "   ✅ Deleted: $current_branch"
-                            ((total_branches++))
-                            git.exe </dev/null pull >& /dev/null
-                        else
-                            echo "   ❌ Failed to delete: $current_branch"
-                        fi
                     fi
+                    echo "   🧹 Removed stale swap file: $rel"
+                done < <(printf '%s\n' "$status" | awk '/^\?\? / { print substr($0, 4) }')
+            fi
+
+            # Tracked changes block a switch; untracked cruft (swap files, stray notes) does not
+            local tracked_dirty=$(printf '%s\n' "$status" | grep -vE '^(\?\?|[[:space:]]*$)')
+
+            if [[ -z "$tracked_dirty" ]] && ! _repos_own_unmerged "$default_branch" HEAD; then
+                if git.exe </dev/null checkout "$default_branch" >& /dev/null; then
+                    if [[ "$repo_printed" == false ]]; then
+                        printf '\r\e[K'
+                        echo "📁 $repo"
+                        repo_printed=true
+                    fi
+                    echo "   🔄 Switched: $current_branch → $default_branch"
+                    local out rc
+                    out=$(_repos_clear_branch "$default_branch" "$current_branch"); rc=$?
+                    [[ -n "$out" ]] && echo "$out"
+                    [[ $rc -eq 0 ]] && total_branches=$((total_branches + 1))
+                    git.exe </dev/null pull >& /dev/null
                 fi
             fi
         fi
@@ -236,24 +310,17 @@ _repos_clear() {
         while IFS= read -r branch; do
             [[ -z "$branch" ]] && continue
 
-            # Use git cherry to detect merged branches (handles squash/rebase merges)
-            # If all lines start with '-' or output is empty, branch is fully merged
-            local cherry=$(git.exe </dev/null cherry "origin/$default_branch" "$branch" 2>/dev/null)
-            local has_unmerged=$(echo "$cherry" | grep -c '^+' || true)
-
-            if [[ "$has_unmerged" -eq 0 ]]; then
+            local out rc
+            out=$(_repos_clear_branch "$default_branch" "$branch"); rc=$?
+            if [[ -n "$out" ]]; then
                 if [[ "$repo_printed" == false ]]; then
                     printf '\r\e[K'
                     echo "📁 $repo"
                     repo_printed=true
                 fi
-                if git.exe </dev/null branch -D "$branch" >& /dev/null; then
-                    echo "   ✅ Deleted: $branch"
-                    ((total_branches++))
-                else
-                    echo "   ❌ Failed: $branch"
-                fi
+                echo "$out"
             fi
+            [[ $rc -eq 0 ]] && total_branches=$((total_branches + 1))
         done <<< "$branches"
 
         popd >& /dev/null
@@ -264,7 +331,7 @@ _repos_clear() {
     if [[ $total_branches -gt 0 ]]; then
         echo "✅ Deleted $total_branches branch(es)"
     else
-        echo "✅ No merged branches to delete"
+        echo "✅ Nothing to clear"
     fi
 }
 
