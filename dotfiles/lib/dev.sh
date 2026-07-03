@@ -17,6 +17,7 @@ function dev_help() {
     echo "  docker, docker-compose → podman.exe"
     echo "  dotnet → dotnet.exe"
     echo "  gh → gh.exe"
+    echo "  ccs → vim ~/.claude/settings.json"
 }
 
 alias docker="podman.exe"
@@ -24,6 +25,7 @@ alias docker-compose="podman.exe compose"
 alias podman="podman.exe"
 alias dotnet="dotnet.exe"
 alias gh="gh.exe"
+alias ccs="vim ~/.claude/settings.json"
 
 # Claude Code only reads CLAUDE.md, not the cross-tool AGENTS.md. If the folder
 # has an AGENTS.md, drop a CLAUDE.md that imports it and keep that bridge out of
