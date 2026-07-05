@@ -16,20 +16,16 @@ cd "$DOTFILES_DIR"
 
 If `repo-find` returns multiple matches, ask the user to disambiguate.
 
-### 2. Pull latest dotfiles from the system
+### 2. Check for changes
 
-```bash
-./manage.sh get
-```
+There is **no pull step**. Every dotfile is symlinked from its live location into the repo
+by `install.sh`, so the repo working tree *is* the live config. Editing `~/.vimrc`, a
+`lib` script, the `claude`/`pi` settings, or anything else edits the repo file directly,
+and the edit already shows up as a working-tree change. Just go straight to analysing the
+diff in step 3.
 
-This copies the **copy-based** config from its live locations into the repo working
-tree: shell prefs, dircolors/vimrc/screenrc, the `claude` and `pi` settings, pi
-extensions, `bin`, and `lib`.
-
-It deliberately does **not** touch `agents/template.md` or `agents/skills/` — those are
-symlinked into `~/.claude` and `~/.pi/agent`, so the repo is already the source of truth
-and any edits show up as working-tree changes without `get`. Don't expect `get` to
-surface them.
+`install.sh` only needs running to (re)create the symlinks — on a new machine, or after
+adding a brand-new dotfile to the repo. It does not "pull" existing config.
 
 **Out of scope:** the home skill folders also contain symlinks pointing into the separate
 `docs-claude-helpers` repo (the work skills and `CLAUDE-template.md`). Those belong to

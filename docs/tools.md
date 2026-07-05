@@ -1,6 +1,6 @@
 # Standalone CLI Tools
 
-Lightweight scripts installed to `~/.local/bin/` via `manage.sh`. Designed for non-interactive use by coding agents but work fine interactively too.
+Lightweight scripts symlinked into `~/.local/bin/` via `install.sh`. Designed for non-interactive use by coding agents but work fine interactively too.
 
 ## web
 

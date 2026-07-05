@@ -103,9 +103,9 @@ Resets the terminal title when pi exits (pi sets the title but doesn't clear it 
 ## Installing
 
 ```bash
-./manage.sh install
+./install.sh
 ```
 
-This copies the pi-specific files (`settings.json` and `extensions/`) to `~/.pi/agent/`,
+This symlinks the pi-specific files (`settings.json` and `extensions/`) into `~/.pi/agent/`,
 then runs `sync-agents.sh` to build `AGENTS.md` (and `CLAUDE.md`) and link skills. Nothing
 needs to be run by hand afterwards.

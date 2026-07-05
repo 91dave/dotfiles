@@ -71,7 +71,7 @@ updated on a fresh install:
 
 ## Install
 
-`./manage.sh install` runs `sync-agents.sh` automatically after copying the
+`./install.sh` runs `sync-agents.sh` automatically after linking the
 agent-specific config, so a normal install builds both instruction files and wires up all
 skills. There is nothing to run by hand unless you edit `template.md` or a skill
 afterwards.
