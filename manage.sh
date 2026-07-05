@@ -12,6 +12,11 @@ case "$1" in
         cp ~/.vimrc dotfiles/vimrc
         cp ~/.tmux.conf dotfiles/tmux.conf
 
+        mkdir -p dotfiles/git
+        cp ~/.gitconfig dotfiles/git/config
+        cp ~/.gitconfig-windows dotfiles/git/config-windows
+        cp ~/.config/git/ignore dotfiles/git/ignore
+
         #claude_windows="%USERPROFILE\.claude"
         claude_windows="C:\\Code\\_docs\docs-claude-helpers"
         claude_folder=$(wslpath $claude_windows | sed -e 's/\r//g')
@@ -50,6 +55,11 @@ case "$1" in
             cp screenrc ~/.screenrc
             cp vimrc ~/.vimrc
             cp tmux.conf ~/.tmux.conf
+
+            mkdir -p ~/.config/git
+            cp git/config ~/.gitconfig
+            cp git/config-windows ~/.gitconfig-windows
+            cp git/ignore ~/.config/git/ignore
 
             # pi
             mkdir -p ~/.pi/agent/extensions/subagent
