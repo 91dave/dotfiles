@@ -4,8 +4,7 @@ You are a model running in {{HARNESS}}. You are running under WSL on a windows s
 
 - use `podman.exe` instead of `docker` for all container operations
 - use `dotnet.exe` not `dotnet`
-- use `git.exe` not `git`
-    - always run `git.exe commit` and `git.exe push` as separate commands
+- always run `git commit` and `git push` as separate commands
 - use `gh.exe` not `gh`
 - use `pwsh.exe` not `pwsh`
 - use `rg` (ripgrep) instead of `grep` for fast recursive text search
