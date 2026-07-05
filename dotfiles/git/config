@@ -1,3 +1,6 @@
+[user]
+	name = Dave Arthur
+	email = dave@localstorm.co.uk
 [includeIf "gitdir:/mnt/c/"]
 	path = ~/.gitconfig-windows
 [credential]
