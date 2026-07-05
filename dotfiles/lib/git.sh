@@ -10,6 +10,7 @@ export WORKSPACE_HOME_WIN='C:\Code\workspaces'
 ## Variables
 export REPO_HOME=$(wslpath $REPO_HOME_WIN)
 export REPO_CACHE=$REPO_HOME/repos-cache.lst
+export REPO_STATUS=$REPO_HOME/repos-status.json
 export REPO_IGNORE=$REPO_HOME/.reposignore
 export REPO_GROUPS=$REPO_HOME/repos-groups.cfg
 export WORKTREE_HOME=$(wslpath $WORKTREE_HOME_WIN)

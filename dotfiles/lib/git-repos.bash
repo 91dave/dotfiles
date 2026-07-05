@@ -335,12 +335,55 @@ _repos_clear() {
     fi
 }
 
+_repos_wip_record() {
+    local records_file="$1" repo_name="$2" repo_rel="$3" branch="$4" \
+          default_branch="$5" dirty_count="$6" unmerged="$7" merged="$8"
+    command -v jq >/dev/null 2>&1 || return 0
+
+    local commits_raw=""
+    if [[ "$branch" != "$default_branch" ]]; then
+        commits_raw=$(git.exe </dev/null log -n 50 --format='%h%x1f%ad%x1f%s' \
+            --date=short "origin/$default_branch..HEAD" 2>/dev/null)
+    fi
+
+    local changed_raw=$(git.exe </dev/null status --porcelain 2>/dev/null \
+        | sed -e 's/^...//' -e 's/^.* -> //')
+    local last_activity=$(git.exe </dev/null log -1 --format=%ad --date=short HEAD 2>/dev/null)
+
+    jq -c -n \
+        --arg name "$repo_name" \
+        --arg path "$repo_rel" \
+        --arg branch "$branch" \
+        --arg default "$default_branch" \
+        --argjson dirty "$dirty_count" \
+        --argjson unmerged "$unmerged" \
+        --arg merged "$merged" \
+        --arg last "$last_activity" \
+        --arg commits "$commits_raw" \
+        --arg changed "$changed_raw" \
+        '{
+            name: $name,
+            path: $path,
+            branch: $branch,
+            default_branch: $default,
+            merged: ($merged == "true"),
+            dirty_files: $dirty,
+            unmerged_commits: $unmerged,
+            last_activity: $last,
+            commits: ($commits | split("\n") | map(select(length > 0))
+                        | map(split("") | {sha: .[0], date: .[1], subject: .[2]})),
+            changed_files: ($changed | split("\n") | map(select(length > 0)))
+        }' >> "$records_file"
+}
+
 _repos_status() {
     echo "🔍 Checking repo status..."
     echo ""
     local -a off_main=()
     local -a dirty=()
     local -a has_merged=()
+
+    local records_file=$(mktemp)
 
     while read -r repo; do
         _repos_should_skip "$repo" && continue
@@ -362,12 +405,17 @@ _repos_status() {
         local current_branch=$(git.exe </dev/null branch --show-current 2>/dev/null)
         local is_dirty=$(git.exe </dev/null status --porcelain 2>/dev/null)
         local repo_name=$(basename "$repo")
+        local dirty_count=0
+        [[ -n "$is_dirty" ]] && dirty_count=$(echo "$is_dirty" | wc -l | tr -d ' ')
 
+        local is_wip=false unmerged=0 merged=false
         if [[ "$current_branch" != "$default_branch" ]]; then
+            is_wip=true
             # Check if branch has unmerged commits (using git cherry for squash/rebase detection)
             local cherry=$(git.exe </dev/null cherry "origin/$default_branch" HEAD 2>/dev/null)
-            local unmerged=$(echo "$cherry" | grep -c '^+' || true)
+            unmerged=$(echo "$cherry" | grep -c '^+' || true)
             if [[ "$unmerged" -eq 0 ]]; then
+                merged=true
                 off_main+=("📁 $repo_name ($current_branch) ✅ merged")
             else
                 off_main+=("📁 $repo_name ($current_branch) ⚠️  $unmerged unmerged commit(s)")
@@ -375,9 +423,12 @@ _repos_status() {
         fi
 
         if [[ -n "$is_dirty" ]] && [[ "$current_branch" == "$default_branch" ]]; then
-            local file_count=$(echo "$is_dirty" | wc -l | tr -d ' ')
-            dirty+=("📁 $repo_name ($current_branch, $file_count file(s))")
+            is_wip=true
+            dirty+=("📁 $repo_name ($current_branch, $dirty_count file(s))")
         fi
+
+        [[ "$is_wip" == true ]] && _repos_wip_record "$records_file" "$repo_name" \
+            "$repo" "$current_branch" "$default_branch" "$dirty_count" "$unmerged" "$merged"
 
         # Check for merged branches that can be cleared (using git cherry for squash/rebase detection)
         local branches=$(git.exe </dev/null branch 2>/dev/null | grep -v -E '^\*|^\s*(main|master)\s*$' | sed 's/^[ \t]*//')
@@ -396,6 +447,14 @@ _repos_status() {
     done < "$REPO_CACHE"
 
     printf '\r\e[K'
+
+    if command -v jq >/dev/null 2>&1; then
+        jq -s --arg generated "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg home "$REPO_HOME" \
+            '{generated: $generated, repo_home: $home, repos: .}' \
+            "$records_file" > "$REPO_STATUS" 2>/dev/null \
+            && echo "💾 Wrote WIP snapshot to $REPO_STATUS"
+    fi
+    rm -f "$records_file"
 
     if [[ ${#off_main[@]} -gt 0 ]]; then
         echo "🌿 Not on main (${#off_main[@]}):"
