@@ -14,25 +14,25 @@ You are a model running in {{HARNESS}}. You are running under WSL on a windows s
 
 All tools below are on PATH and support `--help` for full usage.
 
-### IcePanel CLI (`cli-anything-icepanel`)
+### IcePanel CLI (`icepanel-cli`)
 
 Query and update the C4 architecture model. Use `--json` for structured output.
 
 ```bash
-cli-anything-icepanel --json object list -n "<name>"
-cli-anything-icepanel --json connection list --origin "<object-id>"
+icepanel-cli --json object list -n "<name>"
+icepanel-cli --json connection list --origin "<object-id>"
 ```
 
 **Trigger:** When the user asks about architectural components, references C4 model terms (containers, systems, connections), or asks what a service talks to.
 
-### Azure DevOps CLI (`cli-anything-azdo`)
+### Azure DevOps CLI (`azdo-cli`)
 
 Query and update work items, comments, and queries. Use `--json` for structured output.
 
 ```bash
-cli-anything-azdo --json workitem show 12345
-cli-anything-azdo --json workitem children 12345
-cli-anything-azdo comment add 12345 comment.md
+azdo-cli --json workitem show 12345
+azdo-cli --json workitem children 12345
+azdo-cli comment add 12345 comment.md
 ```
 
 **Trigger:** When `AB#12345` is mentioned, immediately fetch work item details before planning work.
@@ -101,11 +101,6 @@ Preferred order:
 
 **Trigger:** any time a stack trace, type name, or behavioural question points at code outside the current repo (e.g. `Quartex.Common.*`, `Quartex.Core.*`, third-party middleware).
 
-## Commenting Policy
-
-Be very sparing with adding comments, regardless of code/file type. Comments should explain WHY not HOW, and should only be used for genuinely non-obvious scenarios. Prefer a single
-comment at the top of a file or method rather than in-line. The best comment is no comment at all.
-
 ## Capturing Output From Long-Running Commands
 
 When inspecting only the head/tail of a build or test run, **`tee` the full
@@ -115,18 +110,22 @@ context.
 - `| tail -n40` discards everything else — if the tail references an earlier
   error, you're forced to re-run (often a multi-minute build).
 - `tee` keeps the full log on disk for cheap follow-up with `rg` or `less`.
-- Use `/tmp` for the log file; redirect stderr with `2>&1` for build tools.
+- Write the log to `/tmp` (redirect stderr with `2>&1` for build tools). This is
+  deliberate: for disposable build and test logs `/tmp` overrides the harness "use
+  the session scratchpad" default, because it is shorter to reference. Give each log
+  a distinctive name that includes the repo or task (e.g. `/tmp/publication-test.log`)
+  so a parallel session does not clobber a shared `build.log`.
 
 ```bash
 # ✗ Loses output:
 dotnet.exe build | tail -n40
 
 # ✓ Full log captured, tail shown inline:
-dotnet.exe build 2>&1 | tee /tmp/build.log | tail -n40
-npm test       2>&1 | tee /tmp/test.log  | tail -n40
+dotnet.exe build 2>&1 | tee /tmp/publication-build.log | tail -n40
+npm test       2>&1 | tee /tmp/frontend-test.log      | tail -n40
 
 # Follow up without re-running:
-rg -n "error|FAIL" /tmp/build.log
+rg -n "error|FAIL" /tmp/publication-build.log
 ```
 
 ## WSL ↔ Windows Path Handling for `.exe` Commands
