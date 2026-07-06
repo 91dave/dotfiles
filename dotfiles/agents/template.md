@@ -151,3 +151,4 @@ pwsh.exe -File "$USERPROFILE_WIN/.claude/skills/helper.ps1"
 
 @CLAUDE-template.md --exclude "## Technology Choices"
 
+@minimal.md
