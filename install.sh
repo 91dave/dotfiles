@@ -71,8 +71,9 @@ echo "Building agent instruction files + skills..."
 bash "$DF/agents/sync-agents.sh"
 
 echo "bin scripts..."
-link bin/repo-find "$HOME/.local/bin/repo-find"
-link bin/web       "$HOME/.local/bin/web"
+link bin/repo-find       "$HOME/.local/bin/repo-find"
+link bin/web             "$HOME/.local/bin/web"
+link bin/claude-sessions "$HOME/.local/bin/claude-sessions"
 
 if $REMOVE_BAK; then
     echo "Removing backups..."

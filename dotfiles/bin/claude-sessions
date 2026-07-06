@@ -1,0 +1,226 @@
+#!/bin/bash
+# claude-sessions: fuzzy-find and resume a past Claude Code session from any project
+#
+# Lists recent sessions across every project folder, previews each, and on
+# selection jumps to the session's original directory and resumes (or forks) it.
+#
+# Usage:
+#   claude-sessions                 # interactive picker (fzf)
+#   claude-sessions --list          # print the session list (non-interactive)
+#   claude-sessions --preview <id> <cwd>   # render one session's preview
+#   claude-sessions --help
+#
+# Keys (interactive):
+#   enter        run the default action
+#   alt-enter    run the other action
+#   ● in a row   the session is currently live (open in another process)
+#
+# Environment:
+#   CLAUDE_SESSIONS_DEFAULT   resume (default) | fork  -- which action enter runs
+#   CLAUDE_SESSIONS_DRYRUN    if set, print the resume command instead of running it
+#   CLAUDE_CONFIG_DIR         override the Claude config dir (default ~/.claude)
+#
+# Suggested alias:  alias cs=claude-sessions
+
+set -uo pipefail
+
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+PROJECTS_DIR="$CLAUDE_DIR/projects"
+SESSIONS_DIR="$CLAUDE_DIR/sessions"
+SELF="$(command -v claude-sessions 2>/dev/null || realpath "$0")"
+
+die() { echo "claude-sessions: $*" >&2; exit 1; }
+
+need() {
+    for c in "$@"; do
+        command -v "$c" >/dev/null 2>&1 || die "required tool not found: $c"
+    done
+}
+
+# The set of session ids that are currently live, newline-delimited.
+live_ids() {
+    jq -r '.sessionId // empty' "$SESSIONS_DIR"/*.json 2>/dev/null | sort -u
+}
+
+is_live() {  # is_live <id> <newline-delimited-live-set>
+    [[ $'\n'$2$'\n' == *$'\n'$1$'\n'* ]]
+}
+
+# Extract cwd, gitBranch and opening prompt (tab-separated) from the first user
+# line. Handles content as a plain string or a structured array.
+first_user_fields() {
+    jq -r '[
+        .cwd // "?",
+        .gitBranch // "?",
+        (if (.message.content | type) == "string"
+            then .message.content
+            else ([.message.content[]? | select(.type=="text") | .text] | first // "")
+         end)
+    ] | @tsv'
+}
+
+# Reduce a no-title fallback prompt to something readable: drop command/tag
+# wrappers and skip the injected "Caveat:" preamble, keeping the first real line.
+clean_fallback() {
+    printf '%s\n' "$1" | sed 's/\\n/\n/g; s/\\t/ /g; s/<[^>]*>//g' \
+        | awk 'NF && $0 !~ /^[[:space:]]*Caveat:/ { print; exit }'
+}
+
+# Compute the cacheable fields for one transcript: cwd, branch, project, title.
+compute_fields() {
+    local path="$1" first cwd branch prompt title proj
+    first="$(rg -m1 '"type":"user"' "$path" 2>/dev/null)"
+    [[ -n "$first" ]] || return 1
+    IFS=$'\t' read -r cwd branch prompt < <(printf '%s' "$first" | first_user_fields)
+    title="$(rg '"type":"ai-title"' "$path" 2>/dev/null | tail -1 | jq -r '.aiTitle // empty')"
+    [[ -n "$title" ]] || title="$(clean_fallback "$prompt")"
+    [[ -n "$title" ]] || title="(untitled)"
+    title="${title//$'\t'/ }"
+    proj="${cwd##*/}"
+    printf '%s\t%s\t%s\t%s' "$cwd" "$branch" "$proj" "$title"
+}
+
+# A per-transcript cache keyed on file mtime keeps repeat runs fast: only new or
+# changed sessions are recomputed. The live marker is applied at print time, not
+# cached, so it always reflects the current process list.
+build_list() {
+    need jq rg
+    local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/claude-sessions"
+    local cache="$cache_dir/cache.tsv"
+    mkdir -p "$cache_dir" 2>/dev/null
+
+    local live; live="$(live_ids)"
+    declare -A CM CR
+    if [[ -f "$cache" ]]; then
+        local cm cid rest
+        while IFS=$'\t' read -r cm cid rest; do
+            [[ -n "$cid" ]] || continue
+            CM["$cid"]="$cm"; CR["$cid"]="$rest"
+        done < "$cache"
+    fi
+
+    local tmp; tmp="$(mktemp)"
+    local mtime path id fields cwd branch proj title date live_mark display
+    stat -c '%Y %n' "$PROJECTS_DIR"/*/*.jsonl 2>/dev/null | sort -rn | \
+    while read -r mtime path; do
+        [[ -s "$path" ]] || continue
+        id="${path##*/}"; id="${id%.jsonl}"
+        if [[ "${CM[$id]:-}" == "$mtime" ]]; then
+            fields="${CR[$id]}"
+        else
+            fields="$(compute_fields "$path")" || continue
+        fi
+        [[ -n "$fields" ]] || continue
+        printf '%s\t%s\t%s\n' "$mtime" "$id" "$fields" >> "$tmp"
+        IFS=$'\t' read -r cwd branch proj title <<<"$fields"
+        printf -v date '%(%Y-%m-%d %H:%M)T' "$mtime"
+        if is_live "$id" "$live"; then live_mark="●"; else live_mark=" "; fi
+        printf -v display '%-16s %1s  %-60.60s  %-20.20s  %s' \
+            "$date" "$live_mark" "$title" "$proj" "$branch"
+        printf '%s\t%s\t%s\n' "$display" "$id" "$cwd"
+    done
+    mv -f "$tmp" "$cache" 2>/dev/null || rm -f "$tmp"
+}
+
+render_pager() {  # reads markdown on stdin, renders it for the preview pane
+    local width="${FZF_PREVIEW_COLUMNS:-100}"
+    if command -v batcat >/dev/null 2>&1; then
+        batcat --language md --color always --style plain --paging never \
+            --wrap character --terminal-width "$width"
+    elif command -v bat >/dev/null 2>&1; then
+        bat --language md --color always --style plain --paging never \
+            --wrap character --terminal-width "$width"
+    else
+        cat
+    fi
+}
+
+render_preview() {  # render_preview <id> <cwd>
+    need jq rg
+    local id="$1" cwd="${2:-}"
+    local matches=( "$PROJECTS_DIR"/*/"$id.jsonl" )
+    local path="${matches[0]}"
+    [[ -f "$path" ]] || { echo "No transcript found for $id"; return 0; }
+
+    local first start prompt branch title lastp msgs mtime lastact live mark
+    first="$(rg -m1 '"type":"user"' "$path" 2>/dev/null)"
+    start="$(printf '%s' "$first" | jq -r '.timestamp // ""')"
+    branch="$(printf '%s' "$first" | jq -r '.gitBranch // "?"')"
+    prompt="$(printf '%s' "$first" | jq -r 'if (.message.content | type)=="string" then .message.content else ([.message.content[]? | select(.type=="text") | .text] | first // "") end')"
+    title="$(rg '"type":"ai-title"' "$path" 2>/dev/null | tail -1 | jq -r '.aiTitle // empty')"
+    lastp="$(rg '"type":"last-prompt"' "$path" 2>/dev/null | tail -1 | jq -r '.lastPrompt // empty')"
+    msgs="$(rg -c '"type":"user"|"type":"assistant"' "$path" 2>/dev/null || echo 0)"
+    mtime="$(stat -c %Y "$path")"
+    lastact="$(date -d "@$mtime" '+%Y-%m-%d %H:%M')"
+    [[ -n "$start" ]] && start="$(date -d "$start" '+%Y-%m-%d %H:%M' 2>/dev/null || echo "$start")"
+    live="$(live_ids)"
+    if is_live "$id" "$live"; then mark="  \`● live\`"; else mark=""; fi
+
+    {
+        printf '# %s\n\n' "${title:-（untitled）}"
+        printf '**Project**  %s  \n' "$cwd"
+        printf '**Branch**   %s   **Messages** %s%s  \n' "$branch" "$msgs" "$mark"
+        printf '**Started**  %s   **Last active** %s\n\n' "${start:-?}" "$lastact"
+        printf '## Opening prompt\n\n%s\n\n' "${prompt:-（none）}"
+        printf '## Where it left off\n\n%s\n' "${lastp:-（none）}"
+    } | render_pager
+}
+
+resolve_action() {  # resolve_action <key> -> echoes resume|fork
+    local key="$1"
+    local default="${CLAUDE_SESSIONS_DEFAULT:-resume}"
+    [[ "$default" == "fork" || "$default" == "resume" ]] || default="resume"
+    local other; [[ "$default" == "fork" ]] && other="resume" || other="fork"
+    if [[ "$key" == "alt-enter" ]]; then echo "$other"; else echo "$default"; fi
+}
+
+do_action() {  # do_action <key> <id> <cwd>
+    local key="$1" id="$2" cwd="${3:-}"
+    local action; action="$(resolve_action "$key")"
+    local cmd=( claude --resume "$id" )
+    [[ "$action" == "fork" ]] && cmd+=( --fork-session )
+
+    if [[ -n "${CLAUDE_SESSIONS_DRYRUN:-}" ]]; then
+        printf 'cd %q && %s\n' "$cwd" "${cmd[*]}"
+        return 0
+    fi
+    [[ -d "$cwd" ]] || die "directory no longer exists: $cwd"
+    cd "$cwd" || die "cannot cd to $cwd"
+    exec "${cmd[@]}"
+}
+
+interactive() {
+    need fzf jq rg
+    local default other header out key line id cwd
+    default="${CLAUDE_SESSIONS_DEFAULT:-resume}"
+    [[ "$default" == "fork" ]] && other="resume" || other="fork"
+    header="enter: $default   •   alt-enter: $other   •   ● = live session"
+
+    out="$(build_list | fzf \
+        --ansi --delimiter '\t' --with-nth 1 \
+        --expect=enter,alt-enter \
+        --prompt 'session> ' \
+        --header "$header" \
+        --preview "$SELF --preview {2} {3}" \
+        --preview-window 'right,55%,wrap' )"
+    [[ -n "$out" ]] || exit 0
+    key="$(head -1 <<<"$out")"
+    line="$(sed -n '2p' <<<"$out")"
+    [[ -n "$line" ]] || exit 0
+    id="$(cut -f2 <<<"$line")"
+    cwd="$(cut -f3 <<<"$line")"
+    do_action "$key" "$id" "$cwd"
+}
+
+usage() {
+    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+case "${1:-}" in
+    --list)        build_list ;;
+    --preview)     render_preview "${2:-}" "${3:-}" ;;
+    --action)      do_action "${2:-}" "${3:-}" "${4:-}" ;;  # internal: test/hook entry
+    --help|-h)     usage ;;
+    "")            interactive ;;
+    *)             die "unknown option: $1 (try --help)" ;;
+esac
