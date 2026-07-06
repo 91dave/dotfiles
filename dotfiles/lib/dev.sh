@@ -26,6 +26,7 @@ alias podman="podman.exe"
 alias dotnet="dotnet.exe"
 alias gh="gh.exe"
 alias ccs="vim ~/.claude/settings.json"
+alias hank="hunk diff"
 
 # Claude Code only reads CLAUDE.md, not the cross-tool AGENTS.md. If the folder
 # has an AGENTS.md, drop a CLAUDE.md that imports it and keep that bridge out of
