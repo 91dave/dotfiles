@@ -198,6 +198,7 @@ interactive() {
 
     out="$(build_list | fzf \
         --ansi --delimiter '\t' --with-nth 1 \
+        --layout=reverse \
         --expect=enter,alt-enter \
         --prompt 'session> ' \
         --header "$header" \
