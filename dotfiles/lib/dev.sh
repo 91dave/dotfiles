@@ -16,7 +16,6 @@ function dev_help() {
     echo "💡 Aliases:"
     echo "  docker, docker-compose → podman.exe"
     echo "  dotnet → dotnet.exe"
-    echo "  gh → gh.exe"
     echo "  ccs → vim ~/.claude/settings.json"
 }
 
@@ -24,8 +23,8 @@ alias docker="podman.exe"
 alias docker-compose="podman.exe compose"
 alias podman="podman.exe"
 alias dotnet="dotnet.exe"
-alias gh="gh.exe"
 alias ccs="vim ~/.claude/settings.json"
+alias cs="claude-sessions"
 alias hank="hunk diff"
 
 # Claude Code only reads CLAUDE.md, not the cross-tool AGENTS.md. If the folder

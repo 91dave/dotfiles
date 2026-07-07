@@ -38,7 +38,7 @@ case "${1:-}" in
             owners="91dave amdigital-co-uk"
             gh_matches=""
             for owner in $owners; do
-                hits=$(gh.exe search repos "$1" --owner "$owner" --json fullName --jq '.[].fullName' 2>/dev/null)
+                hits=$(gh search repos "$1" --owner "$owner" --json fullName --jq '.[].fullName' 2>/dev/null)
                 if [[ -n "$hits" ]]; then
                     gh_matches="${gh_matches:+$gh_matches$'\n'}$hits"
                 fi

@@ -22,7 +22,6 @@ These aliases provide seamless access to Windows-installed development tools fro
 alias docker="podman.exe"
 alias docker-compose="podman.exe compose"
 alias dotnet="dotnet.exe"
-alias gh="gh.exe"
 alias cc="claude.exe"
 alias bat="batcat"  # Shorter alias for batcat
 ```

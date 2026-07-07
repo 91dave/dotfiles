@@ -5,7 +5,6 @@ You are a model running in {{HARNESS}}. You are running under WSL on a windows s
 - use `podman.exe` instead of `docker` for all container operations
 - use `dotnet.exe` not `dotnet`
 - always run `git commit` and `git push` as separate commands
-- use `gh.exe` not `gh`
 - use `pwsh.exe` not `pwsh`
 - use `rg` (ripgrep) instead of `grep` for fast recursive text search
 - use `fdfind` instead of `find` for fast file finding
@@ -87,16 +86,16 @@ Preferred order:
 
 1. **`gh search code`** — find the type, member, or string across the GitHub org. This works for internal `qtpkg-*` packages and any other repos you have access to.
    ```bash
-   gh.exe search code --owner amdigital-co-uk "class WebsiteInfoModule"
-   gh.exe search code --owner amdigital-co-uk --filename "WebsiteInfoModule.cs"
+   gh search code --owner amdigital-co-uk "class WebsiteInfoModule"
+   gh search code --owner amdigital-co-uk --filename "WebsiteInfoModule.cs"
    ```
 2. **`repo-find <name>`** — once you know the repo, check whether it's already cloned locally and `cd` to it for fast `rg` / `read` access.
    ```bash
    repo-find qtpkg-core
    ```
-3. **`gh.exe api`** — if the repo isn't on disk and cloning is overkill, fetch the specific file via the GitHub API rather than cloning.
+3. **`gh api`** — if the repo isn't on disk and cloning is overkill, fetch the specific file via the GitHub API rather than cloning.
    ```bash
-   gh.exe api repos/amdigital-co-uk/qtpkg-core/contents/path/to/File.cs --jq .content | base64 -d
+   gh api repos/amdigital-co-uk/qtpkg-core/contents/path/to/File.cs --jq .content | base64 -d
    ```
 
 **Trigger:** any time a stack trace, type name, or behavioural question points at code outside the current repo (e.g. `Quartex.Common.*`, `Quartex.Core.*`, third-party middleware).

@@ -327,7 +327,6 @@ The development helpers use Windows executables for better integration:
 ```bash
 alias docker="podman.exe"
 alias dotnet="dotnet.exe"
-alias gh="gh.exe"
 ```
 
 ### git.sh Integration
