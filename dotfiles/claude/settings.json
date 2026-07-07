@@ -29,7 +29,7 @@
       "Bash(git commit:*)",
       "Bash(git status:*)",
       "Bash(git add:*)",
-      "Bash(repo-find:*)",
+      "Bash(repos:*)",
       "Bash(echo:*)"
     ],
     "ask": [

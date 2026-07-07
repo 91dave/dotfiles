@@ -50,8 +50,8 @@ _gwt_ls() {
         [[ "$wt_name" == _* ]] && continue
         pushd "$wt" >& /dev/null || continue
 
-        main_worktree=$(git.exe worktree list 2>/dev/null | head -n1 | awk '{print $1}')
-        wt_branch=$(git.exe branch --show-current 2>/dev/null)
+        main_worktree=$(git worktree list 2>/dev/null | head -n1 | awk '{print $1}')
+        wt_branch=$(git branch --show-current 2>/dev/null)
 
         if [ -z "$main_worktree" ]; then
             echo "  ⚠️  $wt_name (not a git worktree)"
@@ -93,7 +93,7 @@ _gwt_clear() {
 
         pushd "$folder" >& /dev/null || continue
 
-        main_worktree=$(git.exe worktree list 2>/dev/null | head -n1 | awk '{print $1}')
+        main_worktree=$(git worktree list 2>/dev/null | head -n1 | awk '{print $1}')
 
         if [ -z "$main_worktree" ]; then
             echo "  ⚠️  Not a git worktree, skipping"
@@ -107,7 +107,7 @@ _gwt_clear() {
         pushd "$main_worktree_wsl" >& /dev/null || continue
 
         echo "  ✅ Removing from: $(basename "$main_worktree")"
-        git.exe worktree remove "$(wslpath -w "$folder")"
+        git worktree remove "$(wslpath -w "$folder")"
 
         popd >& /dev/null
     done
@@ -140,7 +140,7 @@ _gwt_execute() {
     else
         tag=$(echo $branch | rev | cut -d/ -f1 | rev)
         branch_exists=true
-        [ "$(git.exe branch | grep -e "$branch\$" | wc -l)" = "0" ] && branch_exists=false
+        [ "$(git branch | grep -e "$branch\$" | wc -l)" = "0" ] && branch_exists=false
 
         # Determine folder name based on flags and existing worktrees
         if [ "$use_tag_format" = "true" ]; then
@@ -157,7 +157,7 @@ _gwt_execute() {
     local worktree_exists=false
     if [ -d "$WORKTREE_HOME/$folder" ]; then
         folder_exists=true
-        local wtc=$(git.exe worktree list | grep $branch | wc -l)
+        local wtc=$(git worktree list | grep $branch | wc -l)
         if [ "$wtc" = 0 ]; then
             worktree_exists=false
             folder=$project-$tag
@@ -176,7 +176,7 @@ _gwt_execute() {
         rm)
             if [ "$worktree_exists" = "true" ]; then
                 echo "🗑️  Deleting worktree ${folder}..."
-                git.exe worktree remove "$(wslpath -w $WORKTREE_HOME/$folder)"
+                git worktree remove "$(wslpath -w $WORKTREE_HOME/$folder)"
             else
                 echo "⏭️  Worktree ${folder} does not exist, skipping..."
             fi
@@ -200,22 +200,22 @@ _gwt_execute() {
                 fi
 
                 # Checkout appropriate state before fetching/creating worktree
-                local current_branch=$(git.exe branch --show-current)
+                local current_branch=$(git branch --show-current)
 
                 if [ "$branch" = "$default_branch" ]; then
                     # Target is the default branch - need to get off it first
                     # (Git won't allow worktree for a branch that's currently checked out)
-                    local is_dirty=$(git.exe status --porcelain)
+                    local is_dirty=$(git status --porcelain)
                     if [ -n "$is_dirty" ]; then
                         echo "❌ Cannot proceed - there are uncommitted changes."
                         echo "   Hint: Commit or stash your changes first, then try again."
                         return 1
                     fi
                     echo "🔄 Checking out detached HEAD (worktree will use '$default_branch')..."
-                    git.exe checkout --detach
+                    git checkout --detach
                 elif [ "$current_branch" != "$default_branch" ]; then
                     # Normal case: checkout default branch first
-                    local is_dirty=$(git.exe status --porcelain)
+                    local is_dirty=$(git status --porcelain)
                     if [ -n "$is_dirty" ]; then
                         echo "❌ Cannot switch to '$default_branch' - there are uncommitted changes."
                         echo "   Hint: Commit or stash your changes first, then try again."
@@ -223,15 +223,15 @@ _gwt_execute() {
                     fi
 
                     echo "🔄 Switching to '$default_branch'..."
-                    git.exe checkout "$default_branch"
+                    git checkout "$default_branch"
                 fi
 
                 # Fetch and pull latest before creating worktree
                 echo "🔄 Fetching latest..."
-                git.exe fetch
-                if [ -z "$(git.exe status --porcelain)" ]; then
+                git fetch
+                if [ -z "$(git status --porcelain)" ]; then
                     echo "🔄 Pulling..."
-                    git.exe pull
+                    git pull
                 fi
 
                 local branch_flag="-b"
@@ -243,12 +243,12 @@ _gwt_execute() {
                     echo "⏭️  Worktree ${folder} already exists, skipping..."
                 elif [ "$cmd" = "hadd" ]; then
                     echo "🔍 Dry-run: would execute:"
-                    echo "   git.exe worktree prune"
-                    echo "   git.exe worktree add \"$(wslpath -w $WORKTREE_HOME/$folder)\" $branch_flag $branch"
+                    echo "   git worktree prune"
+                    echo "   git worktree add \"$(wslpath -w $WORKTREE_HOME/$folder)\" $branch_flag $branch"
                 else
                     echo "➕ Creating worktree ${folder}..."
-                    git.exe worktree prune
-                    git.exe worktree add "$(wslpath -w $WORKTREE_HOME/$folder)" $branch_flag $branch
+                    git worktree prune
+                    git worktree add "$(wslpath -w $WORKTREE_HOME/$folder)" $branch_flag $branch
                 fi
             fi
             ;;
@@ -378,7 +378,7 @@ gwt() {
 
     # No args - list current repo's worktrees
     if [ -z "$cmd" ]; then
-        git.exe worktree list
+        git worktree list
         return
     fi
 

@@ -1,0 +1,9 @@
+#!/bin/bash
+# Standalone repos entrypoint; interactive shells override with a repos() function for `cd`
+
+SELF=$(readlink -f "$0")
+DIR=$(dirname "$SELF")
+source "$DIR/../lib/repos-config.sh"
+source "$DIR/../lib/repos-core.bash"
+
+_repos_dispatch "$@"

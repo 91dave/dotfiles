@@ -71,7 +71,7 @@ echo "Building agent instruction files + skills..."
 bash "$DF/agents/sync-agents.sh"
 
 echo "bin scripts..."
-link bin/repo-find       "$HOME/.local/bin/repo-find"
+link bin/repos           "$HOME/.local/bin/repos"
 link bin/web             "$HOME/.local/bin/web"
 link bin/claude-sessions "$HOME/.local/bin/claude-sessions"
 

@@ -57,11 +57,12 @@ const DEFAULT_SAFE_COMMANDS = new Set([
 	"uname", "whoami", "id", "date", "cal", "uptime",
 	"ps", "top", "htop", "free",
 	"rg", "fd", "bat", "eza", "jq", "awk",
-	"curl", "web", "repo-find",
+	"curl", "web",
 ]);
 
 // --- Safe multi-word patterns (command + subcommand) ---
 const SAFE_SUBCOMMANDS: Array<{ cmd: string; subs: RegExp }> = [
+	{ cmd: "repos", subs: /^(ls|status|resolve|view|help)$/i },
 	{ cmd: "git", subs: /^(status|log|diff|show|branch|remote|ls-files|ls-tree|ls-remote)$/i },
 	{ cmd: "git", subs: /^config$/i }, // git config --get is safe; handled by not matching destructive
 	{ cmd: "git.exe", subs: /^(status|log|diff|show|branch|remote|ls-files|ls-tree|ls-remote|config)$/i },

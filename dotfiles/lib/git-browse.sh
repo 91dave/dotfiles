@@ -14,9 +14,9 @@ _gb_path() { echo "$1" | sed 's/^...//; s/.* -> //'; }
 _gs_preview() {
     local f out
     f="$(_gb_path "$1")"
-    if git.exe cat-file -e "HEAD:$f" 2>/dev/null; then
-        out="$(git.exe diff --color=always -- "$f" 2>/dev/null)"
-        [ -z "$out" ] && out="$(git.exe diff --cached --color=always -- "$f" 2>/dev/null)"
+    if git cat-file -e "HEAD:$f" 2>/dev/null; then
+        out="$(git diff --color=always -- "$f" 2>/dev/null)"
+        [ -z "$out" ] && out="$(git diff --cached --color=always -- "$f" 2>/dev/null)"
         echo "$out"
     else
         batcat -n -S --color=always --line-range :500 "$f" 2>/dev/null
@@ -26,10 +26,10 @@ _gs_preview() {
 # gl layer-2 preview: whole file for files added in the commit, otherwise the
 # file's diff within the commit ($1 = commit, $2 = path).
 _gl_file_preview() {
-    if git.exe cat-file -e "$1^:$2" 2>/dev/null; then
-        git.exe show --color=always "$1" -- "$2"
+    if git cat-file -e "$1^:$2" 2>/dev/null; then
+        git show --color=always "$1" -- "$2"
     else
-        git.exe show "$1:$2" 2>/dev/null | batcat -n -S --color=always --line-range :500
+        git show "$1:$2" 2>/dev/null | batcat -n -S --color=always --line-range :500
     fi
 }
 
@@ -40,7 +40,7 @@ export -f _gb_path _gs_preview _gl_file_preview
 # Browse `git status` in fzf (preview = diff), Enter opens the file in batcat.
 gs() {
     local line file
-    line="$(git.exe status --porcelain |
+    line="$(git status --porcelain |
         fzf --ansi --height=70% --layout=reverse --preview-window=60% \
             --preview '_gs_preview {}')" || return
     file="$(_gb_path "$line")"
@@ -52,15 +52,15 @@ gs() {
 # file as it was at that commit in batcat.
 gl() {
     local commit file
-    commit="$(git.exe log --color=always --format='%C(auto)%h %s %C(dim)(%cr)%C(reset)' |
+    commit="$(git log --color=always --format='%C(auto)%h %s %C(dim)(%cr)%C(reset)' |
         fzf --ansi --height=70% --layout=reverse --preview-window=60% \
-            --preview 'git.exe show --stat --color=always {1}' |
+            --preview 'git show --stat --color=always {1}' |
         awk '{print $1}')" || return
     [ -n "$commit" ] || return
 
-    file="$(git.exe show --name-only --pretty=format: "$commit" | sed '/^$/d' |
+    file="$(git show --name-only --pretty=format: "$commit" | sed '/^$/d' |
         fzf --ansi --height=70% --layout=reverse --preview-window=60% \
             --preview "_gl_file_preview $commit {}")" || return
 
-    [ -n "$file" ] && git.exe show "$commit:$file" | batcat -n -S --color=always
+    [ -n "$file" ] && git show "$commit:$file" | batcat -n -S --color=always
 }
