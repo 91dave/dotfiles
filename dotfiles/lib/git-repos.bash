@@ -663,11 +663,20 @@ _fzf_complete_repos() {
         return
     fi
 
-    # Second arg after repo-selecting commands: use fzf to pick a repo
+    # Second arg after repo-selecting commands: pick a repo, pre-filtered by what is typed
     case "$cmd" in
         code|cmd|cd|claude|edit|view)
+            local -a matches
+            mapfile -t matches < <(grep -- "$cur" "$REPO_CACHE")
+
+            if [[ ${#matches[@]} -eq 1 ]]; then
+                COMPREPLY=( "${matches[0]}" )
+                return
+            fi
+
             local selected
-            selected=$(fzf --height=70% --layout=reverse --preview "$EZA_PREVIEW $REPO_HOME/{}" < "$REPO_CACHE")
+            selected=$(fzf --height=70% --layout=reverse --query="$cur" \
+                --preview "$EZA_PREVIEW $REPO_HOME/{}" < "$REPO_CACHE")
             if [[ -n "$selected" ]]; then
                 COMPREPLY=( "$selected" )
             fi
