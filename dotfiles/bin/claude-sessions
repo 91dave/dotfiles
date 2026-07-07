@@ -13,12 +13,18 @@
 # Keys (interactive):
 #   enter        run the default action
 #   alt-enter    run the other action
+#   alt-e        end a live session (remove its live marker)
+#   alt-d        delete a session from the picker (adds it to the blocklist)
 #   ● in a row   the session is currently live (open in another process)
 #
 # Environment:
 #   CLAUDE_SESSIONS_DEFAULT   resume (default) | fork  -- which action enter runs
 #   CLAUDE_SESSIONS_DRYRUN    if set, print the resume command instead of running it
 #   CLAUDE_CONFIG_DIR         override the Claude config dir (default ~/.claude)
+#
+# Files:
+#   blocklist    ${XDG_DATA_HOME:-~/.local/share}/claude-sessions/blocklist
+#                one session id per line; edit or delete it to un-hide sessions.
 #
 # Suggested alias:  alias cs=claude-sessions
 
@@ -27,6 +33,7 @@ set -uo pipefail
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 PROJECTS_DIR="$CLAUDE_DIR/projects"
 SESSIONS_DIR="$CLAUDE_DIR/sessions"
+BLOCKLIST="${XDG_DATA_HOME:-$HOME/.local/share}/claude-sessions/blocklist"
 SELF="$(command -v claude-sessions 2>/dev/null || realpath "$0")"
 
 die() { echo "claude-sessions: $*" >&2; exit 1; }
@@ -44,6 +51,28 @@ live_ids() {
 
 is_live() {  # is_live <id> <newline-delimited-live-set>
     [[ $'\n'$2$'\n' == *$'\n'$1$'\n'* ]]
+}
+
+end_session() {  # end_session <id>  -- remove live marker(s) whose sessionId matches
+    need jq
+    local id="$1" f
+    [[ -n "$id" ]] || return 0
+    for f in "$SESSIONS_DIR"/*.json; do
+        [[ -f "$f" ]] || continue
+        [[ "$(jq -r '.sessionId // empty' "$f" 2>/dev/null)" == "$id" ]] && rm -f "$f"
+    done
+}
+
+block_session() {  # block_session <id>  -- record id in blocklist, transcript kept
+    local id="$1" existing
+    [[ -n "$id" ]] || return 0
+    mkdir -p "$(dirname "$BLOCKLIST")" 2>/dev/null
+    if [[ -f "$BLOCKLIST" ]]; then
+        while IFS= read -r existing; do
+            [[ "$existing" == "$id" ]] && return 0
+        done < "$BLOCKLIST"
+    fi
+    printf '%s\n' "$id" >> "$BLOCKLIST"
 }
 
 # Extract cwd, gitBranch and opening prompt (tab-separated) from the first user
@@ -90,13 +119,19 @@ build_list() {
     mkdir -p "$cache_dir" 2>/dev/null
 
     local live; live="$(live_ids)"
-    declare -A CM CR
+    declare -A CM CR BL
     if [[ -f "$cache" ]]; then
         local cm cid rest
         while IFS=$'\t' read -r cm cid rest; do
             [[ -n "$cid" ]] || continue
             CM["$cid"]="$cm"; CR["$cid"]="$rest"
         done < "$cache"
+    fi
+    if [[ -f "$BLOCKLIST" ]]; then
+        local bid
+        while IFS= read -r bid; do
+            [[ -n "$bid" ]] && BL["$bid"]=1
+        done < "$BLOCKLIST"
     fi
 
     local tmp; tmp="$(mktemp)"
@@ -112,6 +147,7 @@ build_list() {
         fi
         [[ -n "$fields" ]] || continue
         printf '%s\t%s\t%s\n' "$mtime" "$id" "$fields" >> "$tmp"
+        [[ -n "${BL[$id]:-}" ]] && continue
         IFS=$'\t' read -r cwd branch proj title <<<"$fields"
         printf -v date '%(%Y-%m-%d %H:%M)T' "$mtime"
         if is_live "$id" "$live"; then live_mark="●"; else live_mark=" "; fi
@@ -194,7 +230,7 @@ interactive() {
     local default other header out key line id cwd
     default="${CLAUDE_SESSIONS_DEFAULT:-resume}"
     [[ "$default" == "fork" ]] && other="resume" || other="fork"
-    header="enter: $default   •   alt-enter: $other   •   ● = live session"
+    header="enter: $default   •   alt-enter: $other   •   alt-e: end   •   alt-d: delete   •   ● = live"
 
     out="$(build_list | fzf \
         --ansi --delimiter '\t' --with-nth 1 \
@@ -202,6 +238,8 @@ interactive() {
         --expect=enter,alt-enter \
         --prompt 'session> ' \
         --header "$header" \
+        --bind "alt-e:execute-silent($SELF --end {2})+reload($SELF --list)" \
+        --bind "alt-d:execute-silent($SELF --block {2})+reload($SELF --list)" \
         --preview "$SELF --preview {2} {3}" \
         --preview-window 'right,55%,wrap' )"
     [[ -n "$out" ]] || exit 0
@@ -221,6 +259,8 @@ case "${1:-}" in
     --list)        build_list ;;
     --preview)     render_preview "${2:-}" "${3:-}" ;;
     --action)      do_action "${2:-}" "${3:-}" "${4:-}" ;;  # internal: test/hook entry
+    --end)         end_session "${2:-}" ;;                   # internal: fzf bind
+    --block)       block_session "${2:-}" ;;                 # internal: fzf bind
     --help|-h)     usage ;;
     "")            interactive ;;
     *)             die "unknown option: $1 (try --help)" ;;
