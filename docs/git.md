@@ -17,6 +17,12 @@ WORKSPACE_HOME=$(wslpath $WORKSPACE_HOME_WIN)
 # Repository cache file
 REPO_CACHE=$REPO_HOME/repos-cache.lst
 
+# WIP status snapshot (written by repos status)
+REPO_STATUS=$REPO_HOME/repos-status.json
+
+# Archived/readonly repos (written by repos cache)
+REPO_READONLY=$REPO_HOME/repos-readonly.lst
+
 # Repository ignore file (optional)
 REPO_IGNORE=$REPO_HOME/.reposignore
 
@@ -98,7 +104,7 @@ find_git_repos
 
 ### repos
 
-Multi-purpose command for managing all repositories in the cache.
+Multi-purpose command for managing all repositories in the cache. `repos` is an executable on `PATH` (so agents and non-interactive shells can call it), with an interactive shell function of the same name that additionally lets `repos cd` change the current shell's directory.
 
 ```bash
 repos [subcommand]
@@ -130,7 +136,11 @@ repos cache
 # Output:
 # 🔍 Scanning for repos in /mnt/c/Code...
 # ✅ Found 23 repos, cache updated
+# 🔍 Checking GitHub for archived repos...
+# 🔒 2 archived (readonly) repo(s) recorded
 ```
+
+After rebuilding the cache, `repos cache` queries GitHub (via `gh`) for repos that are **archived** across every owner it finds among your cloned repos, and records their local paths in `repos-readonly.lst`. Archived repos are treated as read-only: `repos ls` marks them with 🔒 and `repos cd` warns when you enter one. If `gh` is unavailable the readonly list is left untouched.
 
 **Note:** The cache respects patterns in your `.reposignore` file. See [.reposignore](#reposignore) for configuration.
 
@@ -170,9 +180,49 @@ repos fetch
       another-project (feature-branch)
 ```
 
+#### repos ls
+
+Lists repositories from the cache, one per line, with a status emoji.
+
+```bash
+repos ls [search] [flags]
+```
+
+**Emoji:** 🔒 readonly (archived on GitHub), 📝 modified (uncommitted changes), 🌿 on a branch (other work in progress), 📁 otherwise. Modified/branch state is read from the last `repos status` snapshot (`repos-status.json`).
+
+**Parameters:**
+- `search` - optional term; lists only repos whose path matches (case-insensitive)
+
+**Flags:**
+- `-r`, `--readonly` - only archived/readonly repos
+- `-m`, `--modified` - only repos with uncommitted changes
+- `-a`, `--active` - only repos with work in progress (per the status snapshot)
+
+**Example:**
+```bash
+repos ls terraform
+# 📁 infra/terraform-modules
+# 🔒 archive/terraform-legacy
+```
+
+#### repos find
+
+Raw grep of the cache: prints matching repo paths (relative to `REPO_HOME`) with no emoji and no cross-check against the status or readonly files. With no term it prints the whole cache. This is the plain, script-friendly counterpart to `repos ls`.
+
+```bash
+repos find [search]
+```
+
+**Example:**
+```bash
+repos find terraform
+# infra/terraform-modules
+# archive/terraform-legacy
+```
+
 #### repos status
 
-Checks status of all cached repositories.
+Checks status of all cached repositories. Writes the `repos-status.json` WIP snapshot consumed by `repos ls` and the `wip` skill.
 
 ```bash
 repos status
@@ -275,9 +325,9 @@ The `repos` command supports fzf-powered tab completion:
 ```bash
 # Complete subcommands
 repos <TAB>
-# Shows: fetch, ls, main, clear, code, cmd, cd, claude, cache, help, view
+# Shows: ls, find, status, fetch, main, clear, reset, code, cmd, cd, resolve, claude, view, work, cache, help
 
-# Fuzzy-find repo for code/cmd/cd/claude/view commands
+# Fuzzy-find repo for ls/find/code/cmd/cd/resolve/claude/view commands
 repos code <TAB>
 # Opens fzf picker with directory preview to select a repo
 ```
@@ -344,7 +394,7 @@ repos view myapp
 
 #### repos cd
 
-Changes directory (pushd) into a matching repository.
+Changes directory (pushd) into a matching repository. In an interactive shell this changes the current directory; when run from the `repos` executable (non-interactive) it prints the resolved path instead. Entering an archived repo prints a 🔒 readonly warning.
 
 ```bash
 repos cd [search]
@@ -353,7 +403,21 @@ repos cd [search]
 **Example:**
 ```bash
 repos cd myapp
-# pushd into the matching repository
+# 📂 quartex-services/myapp   (pushd into the matching repository)
+```
+
+#### repos resolve
+
+Prints the absolute path of the single repository matching a search term, for use in command substitution. When nothing matches locally it falls back to a GitHub search across the configured owners.
+
+```bash
+repos resolve [search]
+```
+
+**Example:**
+```bash
+cd "$(repos resolve myapp)"
+# → /mnt/c/Code/quartex-services/myapp
 ```
 
 #### repos claude
@@ -490,8 +554,8 @@ gwt hadd myapp -b feature/another-feature
 **Example output:**
 ```
 🔍 Dry-run: would execute:
-   git.exe worktree prune
-   git.exe worktree add "C:\Code\workspace\myapp" feature/new-feature
+   git worktree prune
+   git worktree add "C:\Code\workspace\myapp" feature/new-feature
 ```
 
 #### Remove worktree

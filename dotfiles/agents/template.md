@@ -45,16 +45,24 @@ web search "query terms"
 web fetch "https://example.com"
 ```
 
-### Repo Finder (`repo-find`)
+### Repos (`repos`)
 
-Locate local repositories by name from a cached repo list.
+Find and manage local repositories from a cached repo list. `repos` is an executable on `PATH`, so it works in non-interactive shells.
 
 ```bash
-repo-find documents        # → full path to matching repo
-repo-find --list terraform
+repos resolve documents    # → single absolute path (errors + lists candidates if ambiguous; GitHub fallback if not cloned)
+repos find terraform       # raw grep of the cache: plain relative paths, no network, no decoration
+repos ls [term]            # human-facing list with state (🔒 readonly/archived, 📝 modified, 🌿 branch)
+repos ls --readonly        # filter (also --modified, --active)
 ```
 
-**Workflow:** `repo-find <term>` → disambiguate if needed → `cd` to path before working.
+**Workflow — lead with `resolve`:**
+1. `cd "$(repos resolve <term>)"` — one shot. On a single match it prints the absolute path; archived repos are flagged read-only.
+2. If `resolve` reports multiple matches, it already lists the candidates. Re-run with a more specific subpath (e.g. `repos resolve services/qtms-documents`) rather than adding a step.
+3. Use `repos find <term>` for quiet, network-free work: existence checks, counting, or iterating matches (`resolve` fires a GitHub search when nothing matches locally, which you rarely want in a loop).
+4. `repos ls` is for human-facing output; prefer `resolve`/`find` in scripts.
+
+`repos resolve` replaces `repo-find <term>`; `repos find` replaces `repo-find --list <term>`.
 
 ## ripgrep (`rg`) and `fd` Gotchas
 
@@ -89,9 +97,9 @@ Preferred order:
    gh search code --owner amdigital-co-uk "class WebsiteInfoModule"
    gh search code --owner amdigital-co-uk --filename "WebsiteInfoModule.cs"
    ```
-2. **`repo-find <name>`** — once you know the repo, check whether it's already cloned locally and `cd` to it for fast `rg` / `read` access.
+2. **`repos resolve <name>`** — once you know the repo, check whether it's already cloned locally and `cd` to it for fast `rg` / `read` access.
    ```bash
-   repo-find qtpkg-core
+   repos resolve qtpkg-core
    ```
 3. **`gh api`** — if the repo isn't on disk and cloning is overkill, fetch the specific file via the GitHub API rather than cloning.
    ```bash

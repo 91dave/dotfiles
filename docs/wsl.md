@@ -331,12 +331,14 @@ alias dotnet="dotnet.exe"
 
 ### git.sh Integration
 
-Git operations use `git.exe` throughout for Windows credential manager integration:
+Git operations use WSL-native `git` (and `gh`) throughout, not the Windows `.exe` builds:
 
 ```bash
-git.exe status
-git.exe worktree list
+git status
+git worktree list
 ```
+
+Native `git` does not use the Windows credential manager automatically. Configure a WSL credential helper (or use SSH remotes) so `repos fetch`/`main`/`clear` and `gwt` can authenticate. GUI launchers (`code`, `github`, `claude`) still go through `cmd.exe`.
 
 ## Usage Tips
 

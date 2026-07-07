@@ -31,21 +31,25 @@ web fetch "https://example.com" --max 16000
 
 ---
 
-## repo-find
+## repos
 
-Locate local repositories by name from a cached repo list.
+Find and manage local repositories from a cached repo list. `repos` is an executable on `PATH`, so agents and non-interactive shells can call it directly. In an interactive shell a `repos()` function of the same name additionally lets `repos cd` change the current directory. Full subcommand reference: [git.md](git.md#repos).
 
 ### Usage
 
 ```bash
-repo-find <term>          # Returns full path (fails if ambiguous)
-repo-find --list          # List all known repos
-repo-find --list <term>   # List repos matching a term
+repos ls [term]           # List repos (🔒 readonly, 📝 modified, 🌿 branch, 📁 clean)
+repos ls --readonly       # Filter: only archived/readonly repos (also --modified, --active)
+repos find [term]         # Raw grep of the cache (plain paths, no decoration)
+repos resolve <term>      # Returns full path (fails if ambiguous; GitHub fallback if not cloned)
+repos status              # Report/refresh WIP snapshot
+repos cache               # Rebuild cache and refresh the archived/readonly list
 ```
 
 ### Examples
 
 ```bash
-repo-find documents        # → /mnt/c/Code/quartex-services/qtms-documents
-repo-find --list terraform # List all terraform-related repos
+repos resolve documents      # → /mnt/c/Code/quartex-services/qtms-documents
+repos ls terraform           # List all terraform-related repos
+cd "$(repos resolve myapp)"  # cd into a repo by fuzzy name
 ```

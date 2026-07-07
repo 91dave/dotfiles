@@ -10,11 +10,11 @@ description: Update, commit and push dotfiles. Locates the dotfiles repo, pulls 
 ### 1. Locate the repo
 
 ```bash
-DOTFILES_DIR=$(repo-find dotfiles)
+DOTFILES_DIR=$(repos resolve dotfiles)
 cd "$DOTFILES_DIR"
 ```
 
-If `repo-find` returns multiple matches, ask the user to disambiguate.
+If `repos resolve` returns multiple matches, ask the user to disambiguate.
 
 ### 2. Analyse changes
 

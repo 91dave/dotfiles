@@ -2,7 +2,7 @@
 name: wip
 description: >
   Summarise the work you have in progress across all local repositories. Reads the
-  repos-status.json snapshot written by `repos ls` (branch, unmerged commits, dirty
+  repos-status.json snapshot written by `repos status` (branch, unmerged commits, dirty
   files, last activity per repo) and turns it into a readable summary grouped by state,
   surfacing the Azure DevOps work items in flight. Use when the user asks "what am I
   working on", "what's in progress", "wip", "where did I leave off", or wants an
@@ -10,7 +10,7 @@ description: >
 argument-hint: "[repo filter] [--refresh]"
 ---
 
-Summarise in-progress work across all local repos from the `repos ls` snapshot.
+Summarise in-progress work across all local repos from the `repos status` snapshot.
 
 **Arguments:** `$ARGUMENTS`
 - An optional plain word filters to repos whose name or branch contains it.
@@ -19,7 +19,7 @@ Summarise in-progress work across all local repos from the `repos ls` snapshot.
 ## Step 1: Locate and freshen the snapshot
 
 The snapshot lives at `$REPO_STATUS` (falls back to `$REPO_HOME/repos-status.json`, i.e.
-`/mnt/c/Code/repos-status.json`). It is written every time `repos ls` runs.
+`/mnt/c/Code/repos-status.json`). It is written every time `repos status` runs.
 
 ```bash
 STATUS="${REPO_STATUS:-/mnt/c/Code/repos-status.json}"
@@ -27,15 +27,14 @@ STATUS="${REPO_STATUS:-/mnt/c/Code/repos-status.json}"
 
 Decide whether to refresh:
 
-- If the file is missing, or `--refresh` was passed, run `repos ls` to (re)generate it.
+- If the file is missing, or `--refresh` was passed, run `repos status` to (re)generate it.
 - Otherwise read `.generated` and report its age. If it is older than about an hour, tell
-  the user and offer to refresh with `repos ls`, but do not block on it.
+  the user and offer to refresh with `repos status`, but do not block on it.
 
-`repos ls` is a shell function from the dotfiles, so invoke it through an interactive
-shell if it is not already defined:
+`repos` is an executable on `PATH`, so invoke it directly:
 
 ```bash
-bash -ic 'repos ls' >/dev/null 2>&1
+repos status >/dev/null 2>&1
 ```
 
 ## Step 2: Read the snapshot
@@ -98,5 +97,5 @@ Offer, without doing them unprompted:
 ## Notes
 
 - Read-only over the snapshot. The only state-changing action is regenerating it with
-  `repos ls`, and only on refresh.
+  `repos status`, and only on refresh.
 - Follow `/writing-conventions` for the summary prose (UK English, no em dashes, no filler).
