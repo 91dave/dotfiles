@@ -27,7 +27,7 @@ _repos_help() {
     echo "Usage:"
     echo "  repos ls [search]   📂 List repos (🔒 readonly, 📝 modified, 🌿 branch)"
     echo "  repos find [search] 🔎 Raw grep of the cache (plain paths, no decoration)"
-    echo "  repos status        📍 Report repos not on main/master or with uncommitted changes"
+    echo "  repos status [--all]📍 Report repos not on main/master or with uncommitted changes (--all also lists merged branches to clear)"
     echo "  repos fetch         🔁 Fetch all repos and pull where possible"
     echo "  repos main          🔄 Switch all repos to main/master branch"
     echo "  repos clear [--all] 🗑️  Reset current branch to main and delete it when it holds no unmerged work of yours (--all sweeps every branch)"
@@ -560,60 +560,44 @@ _repos_wip_record() {
         }' >> "$records_file"
 }
 
-_repos_status() {
-    echo "🔍 Checking repo status..."
-    echo ""
-    local -a off_main=()
-    local -a dirty=()
-    local -a has_merged=()
+_repos_status_worker() {
+    local repo="$1" all="$2" out="$3"
 
-    local records_file=$(mktemp)
+    cd "$REPO_HOME/$repo" 2>/dev/null || return
+    [ -f "bash.exe.stackdump" ] && rm bash.exe.stackdump
 
-    while read -r repo; do
-        _repos_should_skip "$repo" && continue
+    local default_branch=$(_git_get_default_branch)
+    [[ -z "$default_branch" ]] && return
 
-        local repo_path="$REPO_HOME/$repo"
-        [[ ! -d "$repo_path/.git" ]] && continue
+    local current_branch=$(git </dev/null branch --show-current 2>/dev/null)
+    local is_dirty=$(git </dev/null status --porcelain 2>/dev/null)
+    local repo_name=$(basename "$repo")
+    local dirty_count=0
+    [[ -n "$is_dirty" ]] && dirty_count=$(echo "$is_dirty" | wc -l | tr -d ' ')
 
-        printf '\r\e[K⏳ Processing %s...' "$repo"
-
-        pushd "$repo_path" >& /dev/null
-        [ -f "bash.exe.stackdump" ] && rm bash.exe.stackdump
-
-        local default_branch=$(_git_get_default_branch)
-        if [[ -z "$default_branch" ]]; then
-            popd >& /dev/null
-            continue
+    local is_wip=false unmerged=0 merged=false
+    if [[ "$current_branch" != "$default_branch" ]]; then
+        is_wip=true
+        # git cherry detects squash/rebase-merged commits
+        local cherry=$(git </dev/null cherry "origin/$default_branch" HEAD 2>/dev/null)
+        unmerged=$(echo "$cherry" | grep -c '^+' || true)
+        if [[ "$unmerged" -eq 0 ]]; then
+            merged=true
+            printf 'OFF\t📁 %s (%s) ✅ merged\n' "$repo_name" "$current_branch" >> "$out.cat"
+        else
+            printf 'OFF\t📁 %s (%s) ⚠️  %s unmerged commit(s)\n' "$repo_name" "$current_branch" "$unmerged" >> "$out.cat"
         fi
+    fi
 
-        local current_branch=$(git </dev/null branch --show-current 2>/dev/null)
-        local is_dirty=$(git </dev/null status --porcelain 2>/dev/null)
-        local repo_name=$(basename "$repo")
-        local dirty_count=0
-        [[ -n "$is_dirty" ]] && dirty_count=$(echo "$is_dirty" | wc -l | tr -d ' ')
+    if [[ -n "$is_dirty" ]] && [[ "$current_branch" == "$default_branch" ]]; then
+        is_wip=true
+        printf 'DIRTY\t📁 %s (%s, %s file(s))\n' "$repo_name" "$current_branch" "$dirty_count" >> "$out.cat"
+    fi
 
-        local is_wip=false unmerged=0 merged=false
-        if [[ "$current_branch" != "$default_branch" ]]; then
-            is_wip=true
-            # git cherry detects squash/rebase-merged commits
-            local cherry=$(git </dev/null cherry "origin/$default_branch" HEAD 2>/dev/null)
-            unmerged=$(echo "$cherry" | grep -c '^+' || true)
-            if [[ "$unmerged" -eq 0 ]]; then
-                merged=true
-                off_main+=("📁 $repo_name ($current_branch) ✅ merged")
-            else
-                off_main+=("📁 $repo_name ($current_branch) ⚠️  $unmerged unmerged commit(s)")
-            fi
-        fi
+    [[ "$is_wip" == true ]] && _repos_wip_record "$out.json" "$repo_name" \
+        "$repo" "$current_branch" "$default_branch" "$dirty_count" "$unmerged" "$merged"
 
-        if [[ -n "$is_dirty" ]] && [[ "$current_branch" == "$default_branch" ]]; then
-            is_wip=true
-            dirty+=("📁 $repo_name ($current_branch, $dirty_count file(s))")
-        fi
-
-        [[ "$is_wip" == true ]] && _repos_wip_record "$records_file" "$repo_name" \
-            "$repo" "$current_branch" "$default_branch" "$dirty_count" "$unmerged" "$merged"
-
+    if [[ "$all" == true ]]; then
         local branches=$(git </dev/null branch 2>/dev/null | grep -v -E '^\*|^\s*(main|master)\s*$' | sed 's/^[ \t]*//')
         local merged_count=0
         while IFS= read -r branch; do
@@ -622,14 +606,42 @@ _repos_status() {
             local has_unmerged=$(echo "$cherry" | grep -c '^+' || true)
             [[ "$has_unmerged" -eq 0 ]] && ((merged_count++))
         done <<< "$branches"
-        if [[ $merged_count -gt 0 ]]; then
-            has_merged+=("📁 $repo_name ($merged_count branch(es))")
-        fi
+        [[ $merged_count -gt 0 ]] && printf 'MERGED\t📁 %s (%s branch(es))\n' "$repo_name" "$merged_count" >> "$out.cat"
+    fi
 
-        popd >& /dev/null
-    done < "$REPO_CACHE"
+    return 0
+}
 
+_repos_status() {
+    local all=false
+    [[ "$1" == "--all" ]] && all=true
+
+    echo "🔍 Checking repo status..."
+    echo ""
+
+    # Each repo is I/O-bound on the WSL↔Windows boundary, so fan them out concurrently
+    local max_jobs="${REPOS_STATUS_JOBS:-16}"
+    local workdir=$(mktemp -d)
+
+    # Subshell contains job-control notifications so they never reach the interactive shell
+    (
+        idx=0
+        while read -r repo; do
+            _repos_should_skip "$repo" && continue
+            [[ ! -d "$REPO_HOME/$repo/.git" ]] && continue
+
+            idx=$((idx + 1))
+            { _repos_status_worker "$repo" "$all" "$workdir/$idx"; : > "$workdir/$idx.done"; } &
+
+            while (( $(jobs -r -p | wc -l) >= max_jobs )); do wait -n; done
+            printf '\r\e[K⏳ %s/%s repos...' "$(ls "$workdir"/*.done 2>/dev/null | wc -l)" "$idx"
+        done < "$REPO_CACHE"
+        wait
+    )
     printf '\r\e[K'
+
+    local records_file=$(mktemp)
+    cat "$workdir"/*.json > "$records_file" 2>/dev/null
 
     if command -v jq >/dev/null 2>&1; then
         jq -s --arg generated "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg home "$REPO_HOME" \
@@ -639,27 +651,29 @@ _repos_status() {
     fi
     rm -f "$records_file"
 
+    local all_cat=$(cat "$workdir"/*.cat 2>/dev/null)
+    rm -rf "$workdir"
+
+    local -a off_main dirty has_merged
+    mapfile -t off_main   < <(printf '%s\n' "$all_cat" | awk -F'\t' '$1=="OFF"{print $2}'    | sort)
+    mapfile -t dirty      < <(printf '%s\n' "$all_cat" | awk -F'\t' '$1=="DIRTY"{print $2}'  | sort)
+    mapfile -t has_merged < <(printf '%s\n' "$all_cat" | awk -F'\t' '$1=="MERGED"{print $2}' | sort)
+
     if [[ ${#off_main[@]} -gt 0 ]]; then
         echo "🌿 Not on main (${#off_main[@]}):"
-        printf '%s\n' "${off_main[@]}" | sort | while read -r item; do
-            echo "   $item"
-        done
+        printf '   %s\n' "${off_main[@]}"
         echo ""
     fi
 
     if [[ ${#dirty[@]} -gt 0 ]]; then
         echo "📝 Uncommitted changes (${#dirty[@]}):"
-        printf '%s\n' "${dirty[@]}" | sort | while read -r item; do
-            echo "   $item"
-        done
+        printf '   %s\n' "${dirty[@]}"
         echo ""
     fi
 
     if [[ ${#has_merged[@]} -gt 0 ]]; then
-        echo "🧹 Merged branches to clear (${#has_merged[@]}):"
-        printf '%s\n' "${has_merged[@]}" | sort | while read -r item; do
-            echo "   $item"
-        done
+        echo "🧹 Merged branches to clear (${#has_merged[@]}) — run 'repos clear --all':"
+        printf '   %s\n' "${has_merged[@]}"
         echo ""
     fi
 
@@ -823,7 +837,7 @@ _repos_dispatch() {
         reset)          _repos_fetch; echo ""; _repos_clear; echo ""; _repos_status ;;
         cache)          _repos_cache ;;
         clear)          shift; _repos_clear "$@" ;;
-        status)         _repos_status ;;
+        status)         shift; _repos_status "$@" ;;
         ls)             shift; _repos_ls "$@" ;;
         find)           _repos_find_cmd "$2" ;;
         main)           _repos_main ;;

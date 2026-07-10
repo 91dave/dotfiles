@@ -224,17 +224,21 @@ repos find terraform
 
 Checks status of all cached repositories. Writes the `repos-status.json` WIP snapshot consumed by `repos ls` and the `wip` skill.
 
+Repos are inspected concurrently because each check is I/O-bound on the WSL to Windows filesystem boundary. Concurrency defaults to 16 workers; override with `REPOS_STATUS_JOBS`.
+
 ```bash
-repos status
+repos status                      # current state, fast
+repos status --all                # also scan every local branch for merged ones to clear
+REPOS_STATUS_JOBS=24 repos status # more concurrency
 ```
 
 **Shows:**
 - Repos not on main/master branch
 - Repos with uncommitted changes
-- Repos with merged branches that can be cleared
+- With `--all`, repos with merged branches that can be cleared (each branch needs a `git cherry`, so it is opt-in). Pairs with `repos clear --all`.
 - Merge status indicators for branches (uses `git cherry` for accurate squash/rebase merge detection)
 
-**Example output:**
+**Example output (`--all`):**
 ```
 🔍 Checking repo status...
 
@@ -242,10 +246,10 @@ repos status
    📁 myapp (feature-branch) ✅ merged
    📁 another-project (hotfix) ⚠️ 3 unmerged commit(s)
 
-✏️  Uncommitted changes (1):
+📝 Uncommitted changes (1):
    📁 work-in-progress (main, 3 file(s))
 
-🧹 Merged branches to clear (2):
+🧹 Merged branches to clear (2) — run 'repos clear --all':
    📁 myapp (2 branch(es))
    📁 old-project (1 branch(es))
 ```
