@@ -30,7 +30,7 @@ _repos_help() {
     echo "  repos status        📍 Report repos not on main/master or with uncommitted changes"
     echo "  repos fetch         🔁 Fetch all repos and pull where possible"
     echo "  repos main          🔄 Switch all repos to main/master branch"
-    echo "  repos clear         🗑️  Reset current branch to main and delete it when it holds no unmerged work of yours"
+    echo "  repos clear [--all] 🗑️  Reset current branch to main and delete it when it holds no unmerged work of yours (--all sweeps every branch)"
     echo "  repos reset         ♻️  fetch, then clear, then status"
     echo "  repos code <repo>   🚀 Open VS Code in matching repo"
     echo "  repos cmd <repo>    💻 Open WSL window in matching repo"
@@ -412,9 +412,15 @@ _repos_clear_branch() {
 }
 
 _repos_clear() {
+    local all=false
+    [[ "$1" == "--all" ]] && all=true
     local total_branches=0
 
-    echo "🗑️  Clearing the current branch where it holds no unmerged work of yours..."
+    if [[ "$all" == true ]]; then
+        echo "🗑️  Clearing all branches with no unmerged work of yours..."
+    else
+        echo "🗑️  Clearing the current branch where it holds no unmerged work of yours..."
+    fi
     echo ""
 
     while read -r repo; do
@@ -434,50 +440,71 @@ _repos_clear() {
         fi
 
         local current_branch=$(git </dev/null branch --show-current 2>/dev/null)
+        local repo_printed=false
 
-        # Already on the default branch: nothing of ours to clear here, skip the cost
-        if [[ "$current_branch" == "$default_branch" ]]; then
+        # On a non-default branch: switch to main and delete it when it holds no work of yours
+        if [[ "$current_branch" != "$default_branch" ]]; then
+            local status=$(git </dev/null status --porcelain 2>/dev/null)
+
+            # git status already lists untracked files; pull stale (>6h) swap files from its output
+            if [[ -n "$status" ]]; then
+                local now=$(date +%s) rel mtime
+                while IFS= read -r rel; do
+                    [[ "$rel" == *.swp ]] || continue
+                    mtime=$(stat -c %Y "$repo_path/$rel" 2>/dev/null) || continue
+                    (( now - mtime > 21600 )) || continue
+                    rm -f "$repo_path/$rel" 2>/dev/null || continue
+                    if [[ "$repo_printed" == false ]]; then
+                        printf '\r\e[K'
+                        echo "📁 $repo"
+                        repo_printed=true
+                    fi
+                    echo "   🧹 Removed stale swap file: $rel"
+                done < <(printf '%s\n' "$status" | awk '/^\?\? / { print substr($0, 4) }')
+            fi
+
+            # Tracked changes block a switch; untracked cruft does not
+            local tracked_dirty=$(printf '%s\n' "$status" | grep -vE '^(\?\?|[[:space:]]*$)')
+
+            if [[ -z "$tracked_dirty" ]] && ! _repos_own_unmerged "$default_branch" HEAD; then
+                if git </dev/null checkout "$default_branch" >& /dev/null; then
+                    if [[ "$repo_printed" == false ]]; then
+                        printf '\r\e[K'
+                        echo "📁 $repo"
+                        repo_printed=true
+                    fi
+                    echo "   🔄 Switched: $current_branch → $default_branch"
+                    local out rc
+                    out=$(_repos_clear_branch "$default_branch" "$current_branch"); rc=$?
+                    [[ -n "$out" ]] && echo "$out"
+                    [[ $rc -eq 0 ]] && total_branches=$((total_branches + 1))
+                    git </dev/null pull >& /dev/null
+                fi
+            fi
+        elif [[ "$all" != true ]]; then
+            # Already on the default branch and not sweeping: nothing to clear, skip the cost
             popd >& /dev/null
             continue
         fi
 
-        local repo_printed=false
-        local status=$(git </dev/null status --porcelain 2>/dev/null)
+        # --all: also sweep every remaining local branch, not just the current one
+        if [[ "$all" == true ]]; then
+            local branches=$(git </dev/null branch 2>/dev/null | grep -v -E '^\*|^\s*(main|master)\s*$' | sed 's/^[ \t]*//')
+            while IFS= read -r branch; do
+                [[ -z "$branch" ]] && continue
 
-        # git status already lists untracked files; pull stale (>6h) swap files from its output
-        if [[ -n "$status" ]]; then
-            local now=$(date +%s) rel mtime
-            while IFS= read -r rel; do
-                [[ "$rel" == *.swp ]] || continue
-                mtime=$(stat -c %Y "$repo_path/$rel" 2>/dev/null) || continue
-                (( now - mtime > 21600 )) || continue
-                rm -f "$repo_path/$rel" 2>/dev/null || continue
-                if [[ "$repo_printed" == false ]]; then
-                    printf '\r\e[K'
-                    echo "📁 $repo"
-                    repo_printed=true
-                fi
-                echo "   🧹 Removed stale swap file: $rel"
-            done < <(printf '%s\n' "$status" | awk '/^\?\? / { print substr($0, 4) }')
-        fi
-
-        # Tracked changes block a switch; untracked cruft does not
-        local tracked_dirty=$(printf '%s\n' "$status" | grep -vE '^(\?\?|[[:space:]]*$)')
-
-        if [[ -z "$tracked_dirty" ]] && ! _repos_own_unmerged "$default_branch" HEAD; then
-            if git </dev/null checkout "$default_branch" >& /dev/null; then
-                if [[ "$repo_printed" == false ]]; then
-                    printf '\r\e[K'
-                    echo "📁 $repo"
-                    repo_printed=true
-                fi
-                echo "   🔄 Switched: $current_branch → $default_branch"
                 local out rc
-                out=$(_repos_clear_branch "$default_branch" "$current_branch"); rc=$?
-                [[ -n "$out" ]] && echo "$out"
+                out=$(_repos_clear_branch "$default_branch" "$branch"); rc=$?
+                if [[ -n "$out" ]]; then
+                    if [[ "$repo_printed" == false ]]; then
+                        printf '\r\e[K'
+                        echo "📁 $repo"
+                        repo_printed=true
+                    fi
+                    echo "$out"
+                fi
                 [[ $rc -eq 0 ]] && total_branches=$((total_branches + 1))
-                git </dev/null pull >& /dev/null
-            fi
+            done <<< "$branches"
         fi
 
         popd >& /dev/null
@@ -795,7 +822,7 @@ _repos_dispatch() {
         fetch)          _repos_fetch ;;
         reset)          _repos_fetch; echo ""; _repos_clear; echo ""; _repos_status ;;
         cache)          _repos_cache ;;
-        clear)          _repos_clear ;;
+        clear)          shift; _repos_clear "$@" ;;
         status)         _repos_status ;;
         ls)             shift; _repos_ls "$@" ;;
         find)           _repos_find_cmd "$2" ;;
