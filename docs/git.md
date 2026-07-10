@@ -292,9 +292,12 @@ Cleans up the branch each repo is currently on. Repos already sitting on main/ma
 
 For a repo on a non-default branch, if that branch has no uncommitted tracked changes and no unmerged work authored by you, it switches to main, deletes the branch, and pulls. Other local branches are left untouched — clear only ever acts on the current branch.
 
+Repos are processed concurrently (16 workers by default; override with `REPOS_CLEAR_JOBS`), since each acts only on its own working tree.
+
 ```bash
-repos clear          # current branch only (fast, default)
-repos clear --all    # also sweep every other local branch in every repo
+repos clear                      # current branch only (fast, default)
+repos clear --all                # also sweep every other local branch in every repo
+REPOS_CLEAR_JOBS=24 repos clear  # more concurrency
 ```
 
 Pass `--all` to restore the full sweep: repos already on main are no longer skipped, and after handling the current branch it deletes every other merged local branch too. This is slower on large repos with many branches, which is why it is opt-in.

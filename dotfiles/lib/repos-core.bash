@@ -411,10 +411,67 @@ _repos_clear_branch() {
     return 1
 }
 
+_repos_clear_worker() {
+    local repo="$1" all="$2" out="$3"
+
+    cd "$REPO_HOME/$repo" 2>/dev/null || return
+    local default_branch=$(_git_get_default_branch)
+    [[ -z "$default_branch" ]] && return
+
+    local current_branch=$(git </dev/null branch --show-current 2>/dev/null)
+    local deleted=0 body=""
+
+    if [[ "$current_branch" != "$default_branch" ]]; then
+        local status=$(git </dev/null status --porcelain 2>/dev/null)
+
+        # git status already lists untracked files; pull stale (>6h) swap files from its output
+        if [[ -n "$status" ]]; then
+            local now=$(date +%s) rel mtime
+            while IFS= read -r rel; do
+                [[ "$rel" == *.swp ]] || continue
+                mtime=$(stat -c %Y "$rel" 2>/dev/null) || continue
+                (( now - mtime > 21600 )) || continue
+                rm -f "$rel" 2>/dev/null || continue
+                body+="   🧹 Removed stale swap file: $rel"$'\n'
+            done < <(printf '%s\n' "$status" | awk '/^\?\? / { print substr($0, 4) }')
+        fi
+
+        # Tracked changes block a switch; untracked cruft does not
+        local tracked_dirty=$(printf '%s\n' "$status" | grep -vE '^(\?\?|[[:space:]]*$)')
+
+        if [[ -z "$tracked_dirty" ]] && ! _repos_own_unmerged "$default_branch" HEAD; then
+            if git </dev/null checkout "$default_branch" >& /dev/null; then
+                body+="   🔄 Switched: $current_branch → $default_branch"$'\n'
+                local o rc
+                o=$(_repos_clear_branch "$default_branch" "$current_branch"); rc=$?
+                [[ -n "$o" ]] && body+="$o"$'\n'
+                [[ $rc -eq 0 ]] && deleted=$((deleted + 1))
+                git </dev/null pull >& /dev/null
+            fi
+        fi
+    elif [[ "$all" != true ]]; then
+        return
+    fi
+
+    if [[ "$all" == true ]]; then
+        local branches=$(git </dev/null branch 2>/dev/null | grep -v -E '^\*|^\s*(main|master)\s*$' | sed 's/^[ \t]*//')
+        while IFS= read -r branch; do
+            [[ -z "$branch" ]] && continue
+            local o rc
+            o=$(_repos_clear_branch "$default_branch" "$branch"); rc=$?
+            [[ -n "$o" ]] && body+="$o"$'\n'
+            [[ $rc -eq 0 ]] && deleted=$((deleted + 1))
+        done <<< "$branches"
+    fi
+
+    [[ -n "$body" ]] && { echo "📁 $repo"; printf '%s' "$body"; } > "$out.out"
+    echo "$deleted" > "$out.count"
+    return 0
+}
+
 _repos_clear() {
     local all=false
     [[ "$1" == "--all" ]] && all=true
-    local total_branches=0
 
     if [[ "$all" == true ]]; then
         echo "🗑️  Clearing all branches with no unmerged work of yours..."
@@ -423,94 +480,33 @@ _repos_clear() {
     fi
     echo ""
 
-    while read -r repo; do
-        _repos_should_skip "$repo" && continue
+    # Each repo mutates only its own working tree, so it is safe to fan them out concurrently
+    local max_jobs="${REPOS_CLEAR_JOBS:-16}"
+    local workdir=$(mktemp -d)
 
-        local repo_path="$REPO_HOME/$repo"
-        [[ ! -d "$repo_path/.git" ]] && continue
+    # Subshell contains job-control notifications so they never reach the interactive shell
+    (
+        idx=0
+        while read -r repo; do
+            _repos_should_skip "$repo" && continue
+            [[ ! -d "$REPO_HOME/$repo/.git" ]] && continue
 
-        printf '\r\e[K⏳ Processing %s...' "$repo"
+            idx=$((idx + 1))
+            { _repos_clear_worker "$repo" "$all" "$workdir/$idx"; : > "$workdir/$idx.done"; } &
 
-        pushd "$repo_path" >& /dev/null
-
-        local default_branch=$(_git_get_default_branch)
-        if [[ -z "$default_branch" ]]; then
-            popd >& /dev/null
-            continue
-        fi
-
-        local current_branch=$(git </dev/null branch --show-current 2>/dev/null)
-        local repo_printed=false
-
-        # On a non-default branch: switch to main and delete it when it holds no work of yours
-        if [[ "$current_branch" != "$default_branch" ]]; then
-            local status=$(git </dev/null status --porcelain 2>/dev/null)
-
-            # git status already lists untracked files; pull stale (>6h) swap files from its output
-            if [[ -n "$status" ]]; then
-                local now=$(date +%s) rel mtime
-                while IFS= read -r rel; do
-                    [[ "$rel" == *.swp ]] || continue
-                    mtime=$(stat -c %Y "$repo_path/$rel" 2>/dev/null) || continue
-                    (( now - mtime > 21600 )) || continue
-                    rm -f "$repo_path/$rel" 2>/dev/null || continue
-                    if [[ "$repo_printed" == false ]]; then
-                        printf '\r\e[K'
-                        echo "📁 $repo"
-                        repo_printed=true
-                    fi
-                    echo "   🧹 Removed stale swap file: $rel"
-                done < <(printf '%s\n' "$status" | awk '/^\?\? / { print substr($0, 4) }')
-            fi
-
-            # Tracked changes block a switch; untracked cruft does not
-            local tracked_dirty=$(printf '%s\n' "$status" | grep -vE '^(\?\?|[[:space:]]*$)')
-
-            if [[ -z "$tracked_dirty" ]] && ! _repos_own_unmerged "$default_branch" HEAD; then
-                if git </dev/null checkout "$default_branch" >& /dev/null; then
-                    if [[ "$repo_printed" == false ]]; then
-                        printf '\r\e[K'
-                        echo "📁 $repo"
-                        repo_printed=true
-                    fi
-                    echo "   🔄 Switched: $current_branch → $default_branch"
-                    local out rc
-                    out=$(_repos_clear_branch "$default_branch" "$current_branch"); rc=$?
-                    [[ -n "$out" ]] && echo "$out"
-                    [[ $rc -eq 0 ]] && total_branches=$((total_branches + 1))
-                    git </dev/null pull >& /dev/null
-                fi
-            fi
-        elif [[ "$all" != true ]]; then
-            # Already on the default branch and not sweeping: nothing to clear, skip the cost
-            popd >& /dev/null
-            continue
-        fi
-
-        # --all: also sweep every remaining local branch, not just the current one
-        if [[ "$all" == true ]]; then
-            local branches=$(git </dev/null branch 2>/dev/null | grep -v -E '^\*|^\s*(main|master)\s*$' | sed 's/^[ \t]*//')
-            while IFS= read -r branch; do
-                [[ -z "$branch" ]] && continue
-
-                local out rc
-                out=$(_repos_clear_branch "$default_branch" "$branch"); rc=$?
-                if [[ -n "$out" ]]; then
-                    if [[ "$repo_printed" == false ]]; then
-                        printf '\r\e[K'
-                        echo "📁 $repo"
-                        repo_printed=true
-                    fi
-                    echo "$out"
-                fi
-                [[ $rc -eq 0 ]] && total_branches=$((total_branches + 1))
-            done <<< "$branches"
-        fi
-
-        popd >& /dev/null
-    done < "$REPO_CACHE"
-
+            while (( $(jobs -r -p | wc -l) >= max_jobs )); do wait -n; done
+            printf '\r\e[K⏳ %s/%s repos...' "$(ls "$workdir"/*.done 2>/dev/null | wc -l)" "$idx"
+        done < "$REPO_CACHE"
+        wait
+    )
     printf '\r\e[K'
+
+    local f
+    while IFS= read -r f; do cat "$f"; done < <(ls "$workdir"/*.out 2>/dev/null | sort -V)
+
+    local total_branches=0 c
+    while read -r c; do total_branches=$((total_branches + c)); done < <(cat "$workdir"/*.count 2>/dev/null)
+    rm -rf "$workdir"
 
     if [[ $total_branches -gt 0 ]]; then
         echo "✅ Deleted $total_branches branch(es)"
