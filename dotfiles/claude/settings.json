@@ -86,6 +86,9 @@
     "type": "command",
     "command": "/home/dave/.claude/statusline-detailed.sh"
   },
+  "enabledPlugins": {
+    "tmux-agent-sidebar@hiroppy": false
+  },
   "extraKnownMarketplaces": {
     "hiroppy": {
       "source": {
@@ -95,10 +98,8 @@
     }
   },
   "effortLevel": "high",
+  "askUserQuestionTimeout": "never",
   "tui": "fullscreen",
   "autoMemoryEnabled": false,
-  "skipAutoPermissionPrompt": true,
-  "enabledPlugins": {
-    "tmux-agent-sidebar@hiroppy": false
-  }
+  "skipAutoPermissionPrompt": true
 }
