@@ -284,7 +284,9 @@ repos main
 
 #### repos clear
 
-Deletes all branches that have been merged into main/master. Uses `git cherry` to detect merges, which correctly handles squash and rebase merges (not just fast-forward merges).
+Cleans up the branch each repo is currently on. Repos already sitting on main/master are skipped immediately, so the pass stays fast on large repos with many stale branches. Uses `git cherry` to detect merges, which correctly handles squash and rebase merges (not just fast-forward merges).
+
+For a repo on a non-default branch, if that branch has no uncommitted tracked changes and no unmerged work authored by you, it switches to main, deletes the branch, and pulls. Other local branches are left untouched — clear only ever acts on the current branch.
 
 ```bash
 repos clear
@@ -292,22 +294,19 @@ repos clear
 
 **Safety features:**
 - Never deletes main or master branches
-- Only deletes branches fully merged (detected via `git cherry`)
-- If the current branch is merged, auto-switches to the default branch before deleting it
-- Skips repos with uncommitted changes when a branch switch is needed
+- Only deletes the current branch when it holds no unmerged work of yours (detected via `git cherry`)
+- Skips repos already on the default branch without inspecting any branches
+- Skips repos with uncommitted tracked changes rather than switching away from them
 
 **Example output:**
 ```
-🗑️  Deleting merged branches...
+🗑️  Clearing the current branch where it holds no unmerged work of yours...
 
 📁 myapp
-   ✅ Deleted: feature/old-feature
-   ✅ Deleted: hotfix/bug-123
+   🔄 Switched: feature/old-feature → main
+   ✅ Deleted: feature/old-feature (merged)
 
-📁 another-project
-   ✅ Deleted: feature/completed
-
-✅ Deleted 3 branch(es)
+✅ Deleted 1 branch(es)
 ```
 
 #### repos help
