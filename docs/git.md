@@ -148,8 +148,11 @@ After rebuilding the cache, `repos cache` queries GitHub (via `gh`) for repos th
 
 Fetches updates for all cached repositories and auto-pulls when safe.
 
+Repos are fetched concurrently (16 workers by default; override with `REPOS_FETCH_JOBS`), since each is I/O and network-bound.
+
 ```bash
-repos fetch
+repos fetch                      # fetch + safe auto-pull
+REPOS_FETCH_JOBS=24 repos fetch  # more concurrency
 ```
 
 **How it works:**

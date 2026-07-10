@@ -275,63 +275,74 @@ _repos_cache() {
     _repos_readonly_refresh
 }
 
+_repos_fetch_worker() {
+    local repo="$1" out="$2"
+
+    cd "$REPO_HOME/$repo" 2>/dev/null || return
+
+    # Fetch (try main, then master)
+    local fetch_branch="main"
+    if ! git </dev/null fetch origin main 2>/dev/null; then
+        fetch_branch="master"
+        git </dev/null fetch origin master 2>/dev/null || return
+    fi
+
+    local commits=$(git </dev/null rev-list --count HEAD..origin/$fetch_branch 2>/dev/null || echo "0")
+    [[ "$commits" -eq 0 ]] && return
+
+    local branch=$(git </dev/null branch --show-current)
+    local is_dirty=$(git </dev/null status --porcelain)
+
+    if [[ "$branch" == "main" || "$branch" == "master" ]] && [[ -z "$is_dirty" ]]; then
+        git </dev/null pull origin "$branch" >& /dev/null
+        { echo "📁 $repo"; echo "   📥 $commits new commit(s)"; echo "   ✅ Pulled"; } > "$out.out"
+    else
+        { echo "📁 $repo"; echo "   📥 $commits new commit(s)"; } > "$out.out"
+        # Dirty takes priority over branch mismatch
+        if [[ -n "$is_dirty" ]]; then
+            printf 'DIRTY\t%s\n' "$repo" >> "$out.cat"
+        else
+            printf 'BRANCH\t%s (%s)\n' "$repo" "$branch" >> "$out.cat"
+        fi
+    fi
+
+    return 0
+}
+
 _repos_fetch() {
     echo "🔄 Fetching repos..."
     echo ""
 
-    local -a skipped_dirty=()
-    local -a skipped_branch=()
+    # Each repo is I/O and network-bound, so fan them out concurrently
+    local max_jobs="${REPOS_FETCH_JOBS:-16}"
+    local workdir=$(mktemp -d)
 
-    while read -r repo; do
-        _repos_should_skip "$repo" && continue
+    # Subshell contains job-control notifications so they never reach the interactive shell
+    (
+        idx=0
+        while read -r repo; do
+            _repos_should_skip "$repo" && continue
+            [[ ! -d "$REPO_HOME/$repo/.git" ]] && continue
 
-        local repo_path="$REPO_HOME/$repo"
-        [[ ! -d "$repo_path/.git" ]] && continue
+            idx=$((idx + 1))
+            { _repos_fetch_worker "$repo" "$workdir/$idx"; : > "$workdir/$idx.done"; } &
 
-        printf '\r\e[K⏳ Processing %s...' "$repo"
-
-        pushd "$repo_path" >& /dev/null
-
-        # Fetch (try main, then master)
-        local fetch_branch="main"
-        if ! git </dev/null fetch origin main 2>/dev/null; then
-            fetch_branch="master"
-            if ! git </dev/null fetch origin master 2>/dev/null; then
-                popd >& /dev/null
-                continue
-            fi
-        fi
-
-        local commits=$(git </dev/null rev-list --count HEAD..origin/$fetch_branch 2>/dev/null || echo "0")
-
-        if [[ "$commits" -eq 0 ]]; then
-            popd >& /dev/null
-            continue
-        fi
-
-        printf '\r\e[K'
-        echo "📁 $repo"
-        echo "   📥 $commits new commit(s)"
-
-        local branch=$(git </dev/null branch --show-current)
-        local is_dirty=$(git </dev/null status --porcelain)
-
-        if [[ "$branch" == "main" || "$branch" == "master" ]] && [[ -z "$is_dirty" ]]; then
-            git </dev/null pull origin "$branch" >& /dev/null
-            echo "   ✅ Pulled"
-        else
-            # Dirty takes priority over branch mismatch
-            if [[ -n "$is_dirty" ]]; then
-                skipped_dirty+=("$repo")
-            else
-                skipped_branch+=("$repo ($branch)")
-            fi
-        fi
-
-        popd >& /dev/null
-    done < "$REPO_CACHE"
-
+            while (( $(jobs -r -p | wc -l) >= max_jobs )); do wait -n; done
+            printf '\r\e[K⏳ %s/%s repos...' "$(ls "$workdir"/*.done 2>/dev/null | wc -l)" "$idx"
+        done < "$REPO_CACHE"
+        wait
+    )
     printf '\r\e[K'
+
+    local f
+    while IFS= read -r f; do cat "$f"; done < <(ls "$workdir"/*.out 2>/dev/null | sort -V)
+
+    local all_cat=$(cat "$workdir"/*.cat 2>/dev/null)
+    rm -rf "$workdir"
+
+    local -a skipped_dirty skipped_branch
+    mapfile -t skipped_dirty  < <(printf '%s\n' "$all_cat" | awk -F'\t' '$1=="DIRTY"{print $2}'  | sort)
+    mapfile -t skipped_branch < <(printf '%s\n' "$all_cat" | awk -F'\t' '$1=="BRANCH"{print $2}' | sort)
 
     local total_skipped=$(( ${#skipped_dirty[@]} + ${#skipped_branch[@]} ))
     if [[ $total_skipped -gt 0 ]]; then
@@ -341,17 +352,13 @@ _repos_fetch() {
         if [[ ${#skipped_dirty[@]} -gt 0 ]]; then
             echo ""
             echo "   Uncommitted changes:"
-            printf '%s\n' "${skipped_dirty[@]}" | sort | while read -r r; do
-                echo "      $r"
-            done
+            printf '      %s\n' "${skipped_dirty[@]}"
         fi
 
         if [[ ${#skipped_branch[@]} -gt 0 ]]; then
             echo ""
             echo "   Different branch:"
-            printf '%s\n' "${skipped_branch[@]}" | sort | while read -r r; do
-                echo "      $r"
-            done
+            printf '      %s\n' "${skipped_branch[@]}"
         fi
     fi
 }
