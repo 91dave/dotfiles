@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /mnt/c/Code/_docs/docs-claude-helpers/hooks/no-comment-guard.py --allow-single-line",
+            "command": "python3 /mnt/c/Code/_docs/docs-claude-helpers/hooks/no-comment-guard.py --allow-single-line --no-azdo-refs",
             "timeout": 10,
             "statusMessage": "Checking for Claude-authored comments"
           }
@@ -80,6 +80,9 @@
         ]
       }
     ]
+  },
+  "skillOverrides": {
+    "work-item-authoring": "user-invocable-only"
   },
   "workflowKeywordTriggerEnabled": false,
   "statusLine": {
