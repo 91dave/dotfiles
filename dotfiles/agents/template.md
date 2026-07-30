@@ -1,4 +1,8 @@
-# Coding Agent Environment
+# Coding Agent Instructions
+
+@output.md
+
+## Environment
 
 You are a model running in {{HARNESS}}. You are running under WSL on a windows system. Use linux commands as usual with the following exceptions:
 
@@ -7,6 +11,10 @@ You are a model running in {{HARNESS}}. You are running under WSL on a windows s
 - always run `git commit` and `git push` as separate commands
 - use `pwsh.exe` not `pwsh`
 - use `rg` (ripgrep) instead of `grep` for fast recursive text search
+  - **`rg` is not `grep` — flags differ in important ways:**
+  - **`-r` means `--replace`, NOT recursive.** `rg` is recursive by default. Using `rg -rn "pattern"` replaces every match with the letter `n` in the output, producing garbled results. Use `rg -n` for line numbers.
+  - **No `--include` flag.** Use `-g`/`--glob` for file type filtering (e.g. `-g "*.tf"`).
+  - **No `-R` flag.** Recursion is always on; use `--max-depth` to limit it.
 - use `fdfind` instead of `find` for fast file finding
 
 ## Additional Tools
@@ -64,24 +72,6 @@ repos ls --readonly        # filter (also --modified, --active)
 
 `repos resolve` replaces `repo-find <term>`; `repos find` replaces `repo-find --list <term>`.
 
-## ripgrep (`rg`) and `fd` Gotchas
-
-**`rg` is not `grep` — flags differ in important ways:**
-
-- **`-r` means `--replace`, NOT recursive.** `rg` is recursive by default. Using `rg -rn "pattern"` replaces every match with the letter `n` in the output, producing garbled results. Use `rg -n` for line numbers.
-- **No `--include` flag.** Use `-g`/`--glob` for file type filtering (e.g. `-g "*.tf"`).
-- **No `-R` flag.** Recursion is always on; use `--max-depth` to limit it.
-
-```bash
-# ✗ Common mistakes (grep habits):
-rg -rn "pattern"              # Replaces matches with 'n' in output!
-rg --include "*.tf" "pattern"  # Unknown flag
-
-# ✓ Correct ripgrep usage:
-rg -n "pattern"               # Recursive search with line numbers
-rg -n "pattern" -g "*.tf"     # Filter to .tf files
-rg -l "pattern"               # List matching files only
-```
 
 ## Looking Up Source for Third-Party / NuGet / Internal Package Code
 
