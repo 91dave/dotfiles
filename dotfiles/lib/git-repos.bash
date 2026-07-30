@@ -18,7 +18,7 @@ _fzf_complete_repos() {
     local cmd="${COMP_WORDS[1]:-}"
 
     if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "ls find status fetch main clear reset code cmd cd resolve claude view work cache help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "ls find status fetch main clear reset code edit ide cmd cd resolve claude view work cache help" -- "$cur") )
         return
     fi
 
@@ -29,7 +29,7 @@ _fzf_complete_repos() {
                 return
             fi
             ;&
-        find|code|cmd|cd|resolve|claude|edit|view)
+        find|code|cmd|cd|resolve|claude|edit|ide|vs|view)
             local -a matches
             mapfile -t matches < <(grep -- "$cur" "$REPO_CACHE")
 

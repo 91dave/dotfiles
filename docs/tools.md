@@ -43,6 +43,8 @@ repos ls --readonly       # Filter: only archived/readonly repos (also --modifie
 repos find [term]         # Raw grep of the cache (plain paths, no decoration)
 repos resolve <term>      # Returns full path (fails if ambiguous; GitHub fallback if not cloned)
 repos status              # Report/refresh WIP snapshot
+repos code <term>         # Open the repo in VS Code
+repos ide <term>          # Open the repo's .sln/.slnx in Visual Studio
 repos cache               # Rebuild cache and refresh the archived/readonly list
 ```
 

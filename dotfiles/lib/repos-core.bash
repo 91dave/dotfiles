@@ -33,6 +33,7 @@ _repos_help() {
     echo "  repos clear [--all] 🗑️  Reset current branch to main and delete it when it holds no unmerged work of yours (--all sweeps every branch)"
     echo "  repos reset         ♻️  fetch, then clear, then status"
     echo "  repos code <repo>   🚀 Open VS Code in matching repo"
+    echo "  repos ide <repo>    🏗️  Open the repo's solution in Visual Studio"
     echo "  repos cmd <repo>    💻 Open WSL window in matching repo"
     echo "  repos cd <repo>     📂 pushd into matching repo (prints path when non-interactive)"
     echo "  repos resolve <r>   📍 Print absolute path to matching repo (GitHub search fallback)"
@@ -776,16 +777,59 @@ _repos_edit() {
         return
     fi
 
-    local repo=$(_repos_find "$search") || return 1
+    local repo
+    repo=$(_repos_find "$search") || return 1
 
     local repo_path="$REPO_HOME/$repo"
     echo "🚀 Opening VS Code in $repo..."
     (cd "$repo_path" && cmd.exe /c code .)
 }
 
+_repos_solutions() {
+    find "$1" -maxdepth "$2" -not -path '*/.git/*' \( -name '*.sln' -o -name '*.slnx' \) 2>/dev/null | sort
+}
+
+_repos_devenv() {
+    local vswhere="/mnt/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+    [[ -f "$vswhere" ]] || return 1
+
+    local devenv=$("$vswhere" -latest -prerelease -property productPath 2>/dev/null | tr -d '\r')
+    [[ -n "$devenv" ]] || return 1
+    echo "$devenv"
+}
+
+_repos_ide() {
+    local search="$1"
+    local repo
+    repo=$(_repos_find "$search") || return 1
+
+    local repo_path="$REPO_HOME/$repo"
+    local -a solutions
+    mapfile -t solutions < <(_repos_solutions "$repo_path" 1)
+    [[ ${#solutions[@]} -eq 0 ]] && mapfile -t solutions < <(_repos_solutions "$repo_path" 3)
+
+    if [[ ${#solutions[@]} -eq 0 ]]; then
+        echo "❌ No solution file found in $repo" >&2
+        return 1
+    elif [[ ${#solutions[@]} -gt 1 ]]; then
+        echo "❌ Multiple solution files found in $repo:" >&2
+        printf '   %s\n' "${solutions[@]#"$repo_path/"}" >&2
+        return 1
+    fi
+
+    local -a launch=(cmd.exe /c start "")
+    local devenv
+    devenv=$(_repos_devenv) && launch+=("$devenv")
+    launch+=("$(wslpath -w "${solutions[0]}")")
+
+    echo "🏗️  Opening $(basename "${solutions[0]}") in Visual Studio..."
+    (cd "$repo_path" && "${launch[@]}" >/dev/null 2>&1 &)
+}
+
 _repos_view() {
     local search="$1"
-    local repo=$(_repos_find "$search") || return 1
+    local repo
+    repo=$(_repos_find "$search") || return 1
 
     local repo_path="$REPO_HOME/$repo"
     echo "📁 Opening $repo in GitHub Desktop"
@@ -794,7 +838,8 @@ _repos_view() {
 
 _repos_cmd() {
     local search="$1"
-    local repo=$(_repos_find "$search") || return 1
+    local repo
+    repo=$(_repos_find "$search") || return 1
 
     local repo_path="$REPO_HOME/$repo"
     local repo_path_win=$(wslpath -w "$repo_path")
@@ -804,7 +849,8 @@ _repos_cmd() {
 
 _repos_cd() {
     local search="$1"
-    local repo=$(_repos_find "$search") || return 1
+    local repo
+    repo=$(_repos_find "$search") || return 1
 
     local repo_path="$REPO_HOME/$repo"
     if _repos_is_readonly "$repo"; then
@@ -817,7 +863,8 @@ _repos_cd() {
 
 _repos_claude() {
     local search="$1"
-    local repo=$(_repos_find "$search") || return 1
+    local repo
+    repo=$(_repos_find "$search") || return 1
 
     local repo_path="$REPO_HOME/$repo"
     echo "🤖 Opening Claude Code in $repo..."
@@ -845,6 +892,7 @@ _repos_dispatch() {
         find)           _repos_find_cmd "$2" ;;
         main)           _repos_main ;;
         edit|code)      _repos_edit "$2" ;;
+        ide|vs)         _repos_ide "$2" ;;
         cmd)            _repos_cmd "$2" ;;
         cd|resolve)     _repos_resolve "$2" ;;
         claude)         _repos_claude "$2" ;;

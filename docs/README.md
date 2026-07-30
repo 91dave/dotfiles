@@ -30,6 +30,7 @@ repos ls       # View repos with uncommitted changes or off main branch
 
 # Open a specific repo
 repos code my-repo      # VS Code
+repos ide my-repo       # Visual Studio, on the repo's solution file
 repos claude my-repo    # Claude Code
 repos cd my-repo        # pushd into the repo
 repos cmd my-repo       # WSL window

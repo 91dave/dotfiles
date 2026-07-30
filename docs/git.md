@@ -337,9 +337,9 @@ The `repos` command supports fzf-powered tab completion:
 ```bash
 # Complete subcommands
 repos <TAB>
-# Shows: ls, find, status, fetch, main, clear, reset, code, cmd, cd, resolve, claude, view, work, cache, help
+# Shows: ls, find, status, fetch, main, clear, reset, code, edit, ide, cmd, cd, resolve, claude, view, work, cache, help
 
-# Fuzzy-find repo for ls/find/code/cmd/cd/resolve/claude/view commands
+# Fuzzy-find repo for ls/find/code/edit/ide/cmd/cd/resolve/claude/view commands
 repos code <TAB>
 # Opens fzf picker with directory preview to select a repo
 ```
@@ -360,6 +360,34 @@ repos code [search]
 repos code myapp
 # Opens VS Code in the matching repository
 ```
+
+#### repos ide
+
+Opens a matching repository's solution file in Visual Studio. `repos vs` is an alias.
+
+```bash
+repos ide [search]
+```
+
+**Parameters:**
+- `search` - Repository name or partial match
+
+**Example:**
+```bash
+repos ide documents
+# 🏗️  Opening Quartex.Documents.Service.sln in Visual Studio...
+```
+
+**Solution discovery:**
+- Looks for `*.sln` and `*.slnx` in the repository root first
+- If the root has none, searches up to three levels deep, which covers repos such as `qts-assets` and `qts-clients` that nest their solution
+- Reports the candidates and exits if more than one solution matches, or if the repository has none
+
+**Requirements:**
+- Visual Studio must be installed. The IDE is located with `vswhere.exe -latest -prerelease`, so the newest install wins, including a prerelease or Insiders build. Where `vswhere.exe` is missing, the solution is opened via its Windows file association instead.
+
+**Notes:**
+- The launch is backgrounded so the shell returns immediately, but deliberately not fully detached: `setsid` tears down the WSL interop relay and Windows kills `devenv.exe` along with it.
 
 #### repos cmd
 
