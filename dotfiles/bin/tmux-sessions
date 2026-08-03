@@ -1,0 +1,138 @@
+#!/bin/bash
+
+set -uo pipefail
+
+SELF="$(command -v tmux-sessions 2>/dev/null || realpath "$0")"
+
+die() { echo "tmux-sessions: $*" >&2; exit 1; }
+
+need() {
+    for c in "$@"; do
+        command -v "$c" >/dev/null 2>&1 || die "required tool not found: $c"
+    done
+}
+
+usage() {
+    cat <<'EOF'
+tmux-sessions: fuzzy-find and attach to a tmux session
+
+Lists live tmux sessions most recently active first, previews each one's windows
+and the visible contents of its active pane, and attaches to the selection.
+Inside tmux the client switches session instead of nesting.
+
+Usage:
+  tmux-sessions                 # interactive picker (fzf)
+  tmux-sessions --list          # print the session list (non-interactive)
+  tmux-sessions --preview <name>   # render one session's preview
+  tmux-sessions --help
+
+Keys (interactive):
+  enter        attach to (or switch to) the session
+  alt-d        kill the session
+  ● in a row   the session has a client attached
+
+Environment:
+  TMUX_SESSIONS_DRYRUN    if set, print the attach command instead of running it
+
+Suggested alias:  alias ts=tmux-sessions
+EOF
+}
+
+build_list() {
+    need tmux
+    local activity name windows attached path date mark display
+    tmux list-sessions -F '#{session_activity}	#{session_name}	#{session_windows}	#{?session_attached,●, }	#{pane_current_path}' \
+        2>/dev/null | sort -rn | \
+    while IFS=$'\t' read -r activity name windows mark path; do
+        [[ -n "$name" ]] || continue
+        printf -v date '%(%Y-%m-%d %H:%M)T' "$activity"
+        printf -v display '%-16s %1s  %-28.28s  %2s win  %s' \
+            "$date" "$mark" "$name" "$windows" "${path/#$HOME/~}"
+        printf '%s\t%s\n' "$display" "$name"
+    done
+}
+
+render_preview() {  # render_preview <name>
+    need tmux
+    local name="${1:-}"
+    [[ -n "$name" ]] || return 0
+    tmux has-session -t "=$name" 2>/dev/null || { echo "No such session: $name"; return 0; }
+
+    local created activity attached path
+    IFS=$'\t' read -r created activity attached path < <(tmux list-sessions \
+        -f "#{==:#{session_name},$name}" \
+        -F '#{session_created}	#{session_activity}	#{?session_attached,yes,no}	#{pane_current_path}')
+
+    local header
+    header="$(
+        printf '%s%s\n\n' "$name" "$([[ "$attached" == yes ]] && printf ' (attached)')"
+        printf 'Path         %s\n' "$path"
+        printf 'Created      %s\n' "$(date -d "@$created" '+%Y-%m-%d %H:%M')"
+        printf 'Last active  %s\n\n' "$(date -d "@$activity" '+%Y-%m-%d %H:%M')"
+        printf 'Windows\n'
+        tmux list-windows -t "=$name" \
+            -F '  #{window_index}: #{window_name}#{?window_active, *,}  (#{pane_current_command})'
+        printf '\nActive pane\n'
+    )"
+    printf '%s\n\n' "$header"
+
+    local height lines
+    height="${FZF_PREVIEW_LINES:-$(tput lines 2>/dev/null || echo 40)}"
+    lines=$(( height - $(printf '%s\n' "$header" | wc -l) - 1 ))
+    (( lines > 3 )) || lines=3
+    tmux capture-pane -ep -t "=$name:" 2>/dev/null \
+        | awk 'NF { for (; blank > 0; blank--) print ""; print; next } { blank++ }' \
+        | tail -n "$lines"
+}
+
+kill_session() {  # kill_session <name>
+    local name="${1:-}"
+    [[ -n "$name" ]] || return 0
+    tmux kill-session -t "=$name" 2>/dev/null
+}
+
+do_action() {  # do_action <name>
+    local name="${1:-}"
+    [[ -n "$name" ]] || return 0
+    local cmd
+    if [[ -n "${TMUX:-}" ]]; then
+        cmd=( tmux switch-client -t "=$name" )
+    else
+        cmd=( tmux attach-session -t "=$name" )
+    fi
+
+    if [[ -n "${TMUX_SESSIONS_DRYRUN:-}" ]]; then
+        printf '%s\n' "${cmd[*]}"
+        return 0
+    fi
+    tmux has-session -t "=$name" 2>/dev/null || die "no such session: $name"
+    exec "${cmd[@]}"
+}
+
+interactive() {
+    need fzf tmux
+    local out name
+    [[ -n "$(build_list)" ]] || die "no tmux sessions running"
+
+    out="$(build_list | fzf \
+        --ansi --delimiter '\t' --with-nth 1 \
+        --layout=reverse \
+        --prompt 'tmux> ' \
+        --header 'enter: attach   •   alt-d: kill   •   ● = attached' \
+        --bind "alt-d:execute-silent($SELF --kill {2})+reload($SELF --list)" \
+        --preview "$SELF --preview {2}" \
+        --preview-window 'right,55%,nowrap' )"
+    [[ -n "$out" ]] || exit 0
+    name="$(cut -f2 <<<"$out")"
+    do_action "$name"
+}
+
+case "${1:-}" in
+    --list)        build_list ;;
+    --preview)     render_preview "${2:-}" ;;
+    --attach)      do_action "${2:-}" ;;
+    --kill)        kill_session "${2:-}" ;;
+    --help|-h)     usage ;;
+    "")            interactive ;;
+    *)             die "unknown option: $1 (try --help)" ;;
+esac
