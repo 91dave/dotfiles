@@ -210,11 +210,24 @@ resolve_action() {  # resolve_action <key> -> echoes resume|fork
     if [[ "$key" == "alt-enter" ]]; then echo "$other"; else echo "$default"; fi
 }
 
+free_session_name() {  # free_session_name <base>  -- base, base-2, base-3, ...
+    local base="$1" name="$1" n=2
+    while tmux has-session -t "=$name" 2>/dev/null; do
+        name="$base-$n"
+        ((n++))
+    done
+    printf '%s' "$name"
+}
+
 do_action() {  # do_action <key> <id> <cwd>
     local key="$1" id="$2" cwd="${3:-}"
     local action; action="$(resolve_action "$key")"
     local cmd=( claude --resume "$id" )
     [[ "$action" == "fork" ]] && cmd+=( --fork-session )
+
+    if [[ -z "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then
+        cmd=( tmux new-session -s "$(free_session_name "cc-${cwd##*/}")" "${cmd[@]}" )
+    fi
 
     if [[ -n "${CLAUDE_SESSIONS_DRYRUN:-}" ]]; then
         printf 'cd %q && %s\n' "$cwd" "${cmd[*]}"
