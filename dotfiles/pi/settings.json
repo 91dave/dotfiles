@@ -1,11 +1,10 @@
 {
-  "skills": [
-  ],
-  "lastChangelogVersion": "0.78.1",
+  "skills": [],
+  "lastChangelogVersion": "0.84.1",
   "defaultProvider": "github-copilot",
-  "defaultModel": "claude-opus-4.6",
-  "defaultThinkingLevel": "medium",
-  "theme": "dark",
+  "defaultModel": "claude-opus-4.8",
+  "defaultThinkingLevel": "high",
+  "theme": "claude",
   "quietStartup": true,
   "hideThinkingBlock": true,
   "packages": [],
