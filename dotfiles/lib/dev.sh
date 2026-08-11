@@ -85,6 +85,33 @@ function cc() {
     tmux new-session -s "$name" claude "$@"
 }
 
+alias pcs="pi-sessions"
+
+function pca() {
+    # Ensure Node v22+ via nvm (pi requires it)
+    if command -v nvm >/dev/null 2>&1 || [ -s "$NVM_DIR/nvm.sh" ]; then
+        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" 2>/dev/null
+        local node_major
+        node_major="$(node --version 2>/dev/null | sed 's/^v//' | cut -d. -f1)"
+        if [[ -z "$node_major" || "$node_major" -lt 22 ]]; then
+            nvm use 22 2>/dev/null || nvm install 22
+        fi
+    fi
+
+    if [ -n "$TMUX" ]; then
+        pi "$@"
+        return
+    fi
+
+    local base="pi-$(basename "$PWD")"
+    local name="$base" n=2
+    while tmux has-session -t "=$name" 2>/dev/null; do
+        name="$base-$n"
+        ((n++))
+    done
+    tmux new-session -s "$name" pi "$@"
+}
+
 
 function _warn_dev_helper() {
     [ "$WARN_MISSING_HELPERS" = "true" ] && echo $@

@@ -1,0 +1,224 @@
+#!/bin/bash
+# pi-sessions: fuzzy-find and resume a past pi coding agent session from any project
+#
+# Lists recent sessions across every project folder, previews each, and on
+# selection jumps to the session's original directory and resumes it.
+#
+# Usage:
+#   pi-sessions                 # interactive picker (fzf)
+#   pi-sessions --list          # print the session list (non-interactive)
+#   pi-sessions --preview <id> <cwd>   # render one session's preview
+#   pi-sessions --help
+#
+# Keys (interactive):
+#   enter        resume session
+#   alt-enter    fork session
+#   alt-d        delete a session from the picker (adds it to the blocklist)
+#
+# Environment:
+#   PI_SESSIONS_DRYRUN    if set, print the resume command instead of running it
+#
+# Suggested alias:  alias pcs=pi-sessions
+
+set -uo pipefail
+
+PI_DIR="${HOME}/.pi/agent"
+SESSIONS_DIR="$PI_DIR/sessions"
+BLOCKLIST="${XDG_DATA_HOME:-$HOME/.local/share}/pi-sessions/blocklist"
+SELF="$(command -v pi-sessions 2>/dev/null || realpath "$0")"
+
+die() { echo "pi-sessions: $*" >&2; exit 1; }
+
+need() {
+    for c in "$@"; do
+        command -v "$c" >/dev/null 2>&1 || die "required tool not found: $c"
+    done
+}
+
+block_session() {
+    local id="$1"
+    [[ -n "$id" ]] || return 0
+    mkdir -p "$(dirname "$BLOCKLIST")" 2>/dev/null
+    if [[ -f "$BLOCKLIST" ]]; then
+        grep -qxF "$id" "$BLOCKLIST" && return 0
+    fi
+    printf '%s\n' "$id" >> "$BLOCKLIST"
+}
+
+# Decode folder name back to path: --mnt-c-Code-foo-- -> /mnt/c/Code/foo
+decode_folder() {
+    local f="$1"
+    # Strip leading/trailing --
+    f="${f#--}"
+    f="${f%--}"
+    # Replace - with /, but consecutive -- in the middle means literal -
+    # Actually the encoding uses single - for path separators
+    printf '/%s' "$f" | sed 's/-/\//g'
+}
+
+# Extract first user message text (truncated)
+first_user_prompt() {
+    local path="$1"
+    rg -m1 '"role":"user"' "$path" 2>/dev/null | jq -r '
+        if (.message.content | type) == "string" then .message.content
+        else ([.message.content[]? | select(.type=="text") | .text] | first // "")
+        end' 2>/dev/null | head -c 200
+}
+
+# Get cwd from session header
+session_cwd() {
+    head -1 "$1" | jq -r '.cwd // empty' 2>/dev/null
+}
+
+build_list() {
+    need jq rg
+
+    declare -A BL
+    if [[ -f "$BLOCKLIST" ]]; then
+        while IFS= read -r bid; do
+            [[ -n "$bid" ]] && BL["$bid"]=1
+        done < "$BLOCKLIST"
+    fi
+
+    local mtime path id cwd prompt date display proj
+    stat -c '%Y %n' "$SESSIONS_DIR"/*/*.jsonl 2>/dev/null | sort -rn | \
+    while read -r mtime path; do
+        [[ -s "$path" ]] || continue
+        id="${path##*/}"; id="${id%.jsonl}"
+        # Extract UUID portion (after timestamp_)
+        local uuid="${id##*_}"
+        [[ -n "${BL[$uuid]:-}" ]] && continue
+
+        cwd="$(session_cwd "$path")"
+        [[ -n "$cwd" ]] || continue
+        proj="${cwd##*/}"
+
+        prompt="$(first_user_prompt "$path")"
+        # Clean up prompt for display
+        prompt="${prompt//$'\n'/ }"
+        prompt="${prompt:0:60}"
+        [[ -n "$prompt" ]] || prompt="(no prompt)"
+
+        printf -v date '%(%Y-%m-%d %H:%M)T' "$mtime"
+        printf -v display '%-16s  %-60.60s  %-20.20s' "$date" "$prompt" "$proj"
+        printf '%s\t%s\t%s\n' "$display" "$uuid" "$cwd"
+    done
+}
+
+render_pager() {
+    local width="${FZF_PREVIEW_COLUMNS:-100}"
+    if command -v batcat >/dev/null 2>&1; then
+        batcat --language md --color always --style plain --paging never \
+            --wrap character --terminal-width "$width"
+    elif command -v bat >/dev/null 2>&1; then
+        bat --language md --color always --style plain --paging never \
+            --wrap character --terminal-width "$width"
+    else
+        cat
+    fi
+}
+
+render_preview() {
+    need jq rg
+    local uuid="$1" cwd="${2:-}"
+
+    # Find the session file
+    local path=""
+    local match
+    for match in "$SESSIONS_DIR"/*/"*${uuid}*.jsonl" "$SESSIONS_DIR"/*/*"${uuid}"*.jsonl; do
+        [[ -f "$match" ]] && { path="$match"; break; }
+    done
+    # Glob didn't expand cleanly, search manually
+    if [[ -z "$path" || ! -f "$path" ]]; then
+        path="$(find "$SESSIONS_DIR" -name "*${uuid}*" -type f 2>/dev/null | head -1)"
+    fi
+    [[ -f "$path" ]] || { echo "No transcript found for $uuid"; return 0; }
+
+    local start prompt msgs mtime lastact model
+    start="$(head -1 "$path" | jq -r '.timestamp // ""')"
+    [[ -n "$start" ]] && start="$(date -d "$start" '+%Y-%m-%d %H:%M' 2>/dev/null || echo "$start")"
+    model="$(rg -m1 '"type":"model_change"' "$path" 2>/dev/null | jq -r '.modelId // "?"')"
+    prompt="$(first_user_prompt "$path")"
+    msgs="$(rg -c '"role":"user"\|"role":"assistant"' "$path" 2>/dev/null || echo 0)"
+    mtime="$(stat -c %Y "$path")"
+    lastact="$(date -d "@$mtime" '+%Y-%m-%d %H:%M')"
+
+    # Last user message
+    local last_prompt
+    last_prompt="$(rg '"role":"user"' "$path" 2>/dev/null | tail -1 | jq -r '
+        if (.message.content | type) == "string" then .message.content
+        else ([.message.content[]? | select(.type=="text") | .text] | first // "")
+        end' 2>/dev/null | head -c 300)"
+
+    {
+        printf '# %s\n\n' "${prompt:0:80}"
+        printf '**Project**  %s  \n' "$cwd"
+        printf '**Model**    %s   **Messages** %s  \n' "$model" "$msgs"
+        printf '**Started**  %s   **Last active** %s\n\n' "${start:-?}" "$lastact"
+        printf '## Opening prompt\n\n%s\n\n' "${prompt:-（none）}"
+        printf '## Where it left off\n\n%s\n' "${last_prompt:-（none）}"
+    } | render_pager
+}
+
+free_session_name() {
+    local base="$1" name="$1" n=2
+    while tmux has-session -t "=$name" 2>/dev/null; do
+        name="$base-$n"
+        ((n++))
+    done
+    printf '%s' "$name"
+}
+
+do_action() {
+    local key="$1" uuid="$2" cwd="${3:-}"
+    local cmd=( pi --session "$uuid" )
+    [[ "$key" == "alt-enter" ]] && cmd=( pi --fork "$uuid" )
+
+    if [[ -z "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then
+        cmd=( tmux new-session -s "$(free_session_name "pi-${cwd##*/}")" "${cmd[@]}" )
+    fi
+
+    if [[ -n "${PI_SESSIONS_DRYRUN:-}" ]]; then
+        printf 'cd %q && %s\n' "$cwd" "${cmd[*]}"
+        return 0
+    fi
+    [[ -d "$cwd" ]] || die "directory no longer exists: $cwd"
+    cd "$cwd" || die "cannot cd to $cwd"
+    exec "${cmd[@]}"
+}
+
+interactive() {
+    need fzf jq rg
+    local header="enter: resume   •   alt-enter: fork   •   alt-d: delete"
+
+    local out key line uuid cwd
+    out="$(build_list | fzf \
+        --ansi --delimiter '\t' --with-nth 1 \
+        --layout=reverse \
+        --expect=enter,alt-enter \
+        --prompt 'pi session> ' \
+        --header "$header" \
+        --bind "alt-d:execute-silent($SELF --block {2})+reload($SELF --list)" \
+        --preview "$SELF --preview {2} {3}" \
+        --preview-window 'right,55%,wrap' )"
+    [[ -n "$out" ]] || exit 0
+    key="$(head -1 <<<"$out")"
+    line="$(sed -n '2p' <<<"$out")"
+    [[ -n "$line" ]] || exit 0
+    uuid="$(cut -f2 <<<"$line")"
+    cwd="$(cut -f3 <<<"$line")"
+    do_action "$key" "$uuid" "$cwd"
+}
+
+usage() {
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+case "${1:-}" in
+    --list)        build_list ;;
+    --preview)     render_preview "${2:-}" "${3:-}" ;;
+    --block)       block_session "${2:-}" ;;
+    --help|-h)     usage ;;
+    "")            interactive ;;
+    *)             die "unknown option: $1 (try --help)" ;;
+esac

@@ -74,6 +74,7 @@ echo "bin scripts..."
 link bin/repos           "$HOME/.local/bin/repos"
 link bin/web             "$HOME/.local/bin/web"
 link bin/claude-sessions "$HOME/.local/bin/claude-sessions"
+link bin/pi-sessions     "$HOME/.local/bin/pi-sessions"
 link bin/tmux-sessions   "$HOME/.local/bin/tmux-sessions"
 
 if $REMOVE_BAK; then
