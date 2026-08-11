@@ -15,6 +15,11 @@ TEMPLATE="$SCRIPT_DIR/template.md"
 CLAUDE_HOME="$HOME/.claude"
 PI_HOME="$HOME/.pi/agent"
 
+# Max characters allowed in a skill's frontmatter description. Skills whose
+# description exceeds this are materialised as a real folder (siblings symlinked,
+# SKILL.md rewritten with a truncated description) instead of a plain dir symlink.
+MAX_DESC_CHARS=1024
+
 # Per-agent section exclusions: headings (exact-line match) to strip from one
 # agent's output so CLAUDE.md and AGENTS.md can diverge. Add a line per heading.
 CLAUDE_EXCLUDES=(
@@ -173,13 +178,70 @@ link_skills() {
             [ -d "$skill" ] || continue
             name="$(basename "$skill")"
             # Replace whatever is there (stale copy, dir, or older link) so the result is
-            # always a clean symlink — personal skills are linked last and thus win.
+            # always clean — personal skills are linked last and thus win.
             rm -rf "$dir/$name"
-            ln -s "${skill%/}" "$dir/$name"
+            link_skill "${skill%/}" "$dir/$name"
         done
     done
 
-    echo "Linked skills into $dir ($(find "$dir" -maxdepth 1 -type l | wc -l) skills)"
+    echo "Linked skills into $dir ($(find "$dir" -maxdepth 1 -mindepth 1 | wc -l) skills)"
+}
+
+# Link a single skill into an agent's skills folder. If its SKILL.md description is
+# within MAX_DESC_CHARS, symlink the whole folder. Otherwise materialise a real folder
+# with siblings symlinked and a SKILL.md whose description is truncated.
+# Usage: link_skill <source-skill-dir> <dest-path>
+link_skill() {
+    local skill="$1"
+    local dest="$2"
+    python3 - "$skill" "$dest" "$MAX_DESC_CHARS" <<'PY'
+import os, re, sys
+
+skill, dest, maxlen = sys.argv[1], sys.argv[2], int(sys.argv[3])
+skillmd = os.path.join(skill, "SKILL.md")
+
+def extract(fm_lines):
+    """Return (start, end, text) for the description, or None. end is exclusive."""
+    for i, line in enumerate(fm_lines):
+        m = re.match(r"^description:\s*(.*)$", line)
+        if not m:
+            continue
+        val = m.group(1).strip()
+        if re.fullmatch(r"[>|][+-]?", val):  # block scalar: consume indented lines
+            j = i + 1
+            buf = []
+            while j < len(fm_lines) and (fm_lines[j].strip() == "" or fm_lines[j].startswith((" ", "\t"))):
+                buf.append(fm_lines[j].strip())
+                j += 1
+            return i, j, " ".join(x for x in buf if x)
+        return i, i + 1, val.strip('"').strip("'")
+    return None
+
+needs_trunc = False
+if os.path.isfile(skillmd):
+    text = open(skillmd, encoding="utf-8").read()
+    fm = re.match(r"^(---\n)(.*?\n)(---\n?)(.*)$", text, re.S)
+    if fm:
+        fm_lines = fm.group(2).splitlines()
+        found = extract(fm_lines)
+        if found and len(found[2]) > maxlen:
+            needs_trunc = True
+            start, end, desc = found
+            truncated = desc[:maxlen].rstrip()
+            new_fm = fm_lines[:start] + ["description: |-", "  " + truncated] + fm_lines[end:]
+            new_text = fm.group(1) + "\n".join(new_fm) + "\n" + fm.group(3) + fm.group(4)
+            os.makedirs(dest, exist_ok=True)
+            for entry in os.listdir(skill):
+                if entry == "SKILL.md":
+                    continue
+                os.symlink(os.path.join(skill, entry), os.path.join(dest, entry))
+            with open(os.path.join(dest, "SKILL.md"), "w", encoding="utf-8") as f:
+                f.write(new_text)
+            print(f"  truncated description for {os.path.basename(skill)} ({len(desc)} -> {len(truncated)} chars)")
+
+if not needs_trunc:
+    os.symlink(skill, dest)
+PY
 }
 
 build_for "Claude Code" "$CLAUDE_HOME/CLAUDE.md" "${CLAUDE_EXCLUDES[@]}"
