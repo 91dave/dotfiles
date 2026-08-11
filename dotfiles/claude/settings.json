@@ -43,6 +43,9 @@
     ],
     "defaultMode": "auto"
   },
+  "skillOverrides": {
+    "work-item-authoring": "user-invocable-only"
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -80,9 +83,6 @@
         ]
       }
     ]
-  },
-  "skillOverrides": {
-    "work-item-authoring": "user-invocable-only"
   },
   "workflowKeywordTriggerEnabled": false,
   "statusLine": {
