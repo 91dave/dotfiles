@@ -26,14 +26,14 @@ import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { execFile } from "node:child_process";
 import { basename } from "node:path";
 
-const LEVEL_TOKEN: Record<string, string> = {
-  off: "thinkingOff",
-  minimal: "thinkingMinimal",
-  low: "thinkingLow",
-  medium: "thinkingMedium",
-  high: "thinkingHigh",
-  xhigh: "thinkingXhigh",
-  max: "thinkingMax",
+const LEVEL_DOT_RGB: Record<string, string> = {
+  off: "111;101;112",
+  minimal: "154;143;149",
+  low: "127;176;212",
+  medium: "138;168;114",
+  high: "224;164;88",
+  xhigh: "217;119;87",
+  max: "224;120;138",
 };
 
 /** ms → H:MM:SS (hours dropped when zero) */
@@ -107,9 +107,9 @@ export default function (pi: ExtensionAPI) {
       invalidate() {},
       render(width: number): string[] {
         const level = ctx.thinkingLevel ?? "off";
-        const token = LEVEL_TOKEN[level] ?? "dim";
+        const rgb = LEVEL_DOT_RGB[level] ?? LEVEL_DOT_RGB.off;
         const label =
-          theme.fg(token, `● ${level}`) + theme.fg("dim", " · /effort");
+          `\x1b[38;2;${rgb}m● ${level}\x1b[0m` + theme.fg("dim", " · /effort");
         const pad = Math.max(0, width - visibleWidth(label));
         return [" ".repeat(pad) + label];
       },
@@ -173,7 +173,14 @@ export default function (pi: ExtensionAPI) {
               theme.fg("toolDiffRemoved", `-${del}`),
           );
 
-          return [truncateToWidth(seg.join("  "), width)];
+          const pad = "  ";
+          const lines = [truncateToWidth(pad + seg.join("  "), width)];
+          const statuses = footerData.getExtensionStatuses?.();
+          if (statuses && statuses.size > 0) {
+            const modeLine = Array.from(statuses.values()).join("  ");
+            lines.push(truncateToWidth(pad + modeLine, width));
+          }
+          return lines;
         },
       };
     });

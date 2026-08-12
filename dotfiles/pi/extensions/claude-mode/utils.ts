@@ -255,6 +255,20 @@ function classifySegment(segment: string): CommandSafety {
  * If ALL segments are safe, the whole command is safe.
  * Otherwise it's unknown (caller should prompt).
  */
+export function isGitCommitOrPush(command: string): boolean {
+	for (const segment of splitSegments(command)) {
+		const { cmd, firstArg } = extractCommand(segment);
+		const cmdLower = cmd.toLowerCase();
+		if (
+			(cmdLower === "git" || cmdLower === "git.exe") &&
+			/^(commit|push)$/i.test(firstArg)
+		) {
+			return true;
+		}
+	}
+	return false;
+}
+
 export function classifyCommand(command: string): CommandSafety {
 	const segments = splitSegments(command);
 	if (segments.length === 0) return "unknown";

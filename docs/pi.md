@@ -16,7 +16,7 @@ pi-specific dotfiles live under `dotfiles/pi/` and install to `~/.pi/agent/`:
 | `extensions/subagent/index.ts` | Custom subagent tool — delegates tasks to specialised agents in isolated context windows |
 | `extensions/subagent/agents.ts` | Agent discovery logic (reads from `~/.pi/agent/agents/` and `agentDirs` in settings) |
 | `extensions/permission-gate.ts` | Prompts for confirmation before running gated bash commands (configured via `permissionGate` in settings) |
-| `extensions/readonly-mode/` | Toggleable read-only mode that removes edit/write tools and classifies bash commands as safe/destructive/unknown (configured via `readonlyMode` in settings) |
+| `extensions/claude-mode/` | Cyclable operating modes (auto / accept-edits / plan) with an at-a-glance mode line, modelled on Claude Code. Removes edit/write tools and classifies bash commands in plan mode; blocks `git commit`/`push` in accept-edits (configured via `claudeMode` in settings) |
 | `extensions/reset-title-on-exit.ts` | Resets terminal title on exit (pi sets it but doesn't clear it) |
 
 The shared system-prompt source (`template.md`) and personal skills now live under
@@ -74,20 +74,31 @@ Each entry has:
 
 To gate additional commands, add more entries to the array (e.g. `rm -rf`, `kubectl delete`, deployment scripts). If no UI is available (e.g. headless/piped mode), gated commands are blocked outright.
 
-### readonly-mode
+### claude-mode
 
-A toggleable read-only mode for safe exploration. When enabled, the `edit` and `write`
-tools are removed, the system prompt tells the model not to modify files, and bash
-commands are classified as **safe** (run without prompting), **destructive** (blocked),
-or **unknown** (prompt for confirmation).
+Explicit, cyclable operating modes modelled on Claude Code's shift+tab cycle. pi's
+native behaviour is full access; this makes the current posture visible via a mode
+line published as an extension status. With the `claude-ui` footer active it renders
+on a second line directly beneath the `[model]` status line (matching Claude); with
+the built-in footer it appears inline. Three modes cycle in order:
 
-Toggle it with the `/readonly` command, the `Alt+M` shortcut, or the `--readonly` CLI
-flag. Set the default and tune the command classification via `readonlyMode` in
-`settings.json`:
+| Mode | Line | Behaviour |
+|------|------|-----------|
+| **auto mode** | `▶▶ auto mode` (gold) | pi default — full access, no restrictions |
+| **accept edits** | `▶ accept edits` (purple) | edits allowed, but `git commit` and `git push` are blocked |
+| **plan mode** | `⏸ plan mode` (blue) | writes blocked — `edit`/`write` removed, bash classified **safe** (runs), **destructive** (blocked), or **unknown** (prompt) |
+
+Cycle forward with **Alt+M**, backward with **Alt+Shift+M**. Jump directly with
+`/mode <auto|accept-edits|plan>` (no arg cycles). Aliases: `/readonly` and the
+`--readonly` CLI flag both jump to plan mode. The active mode persists across
+`/resume`.
+
+Set the startup mode and tune the plan-mode command classification via `claudeMode`
+in `settings.json`:
 
 ```json
-"readonlyMode": {
-  "enabled": false,
+"claudeMode": {
+  "default": "accept-edits",
   "safeCommands": ["cli-anything-icepanel", "cli-anything-azdo"],
   "safePrefixes": [],
   "safeSubcommands": [{ "cmd": "web", "subs": ["fetch", "search"] }],
@@ -95,6 +106,9 @@ flag. Set the default and tune the command classification via `readonlyMode` in
   "destructivePrefixes": []
 }
 ```
+
+A legacy `readonlyMode` key (boolean or object) is still honoured: it maps to a
+`plan` default and its command lists feed the plan-mode classifier.
 
 ### reset-title-on-exit
 

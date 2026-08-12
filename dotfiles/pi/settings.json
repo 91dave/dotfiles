@@ -18,8 +18,8 @@
       "label": "git push"
     }
   ],
-  "readonlyMode": {
-    "enabled": false,
+  "claudeMode": {
+    "default": "accept-edits",
     "safeCommands": [
       "cli-anything-icepanel",
       "cli-anything-azdo"
