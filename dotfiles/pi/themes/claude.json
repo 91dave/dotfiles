@@ -62,12 +62,12 @@
     "syntaxOperator": "clay",
     "syntaxPunctuation": "gray",
     "thinkingOff": "grayDim",
-    "thinkingMinimal": "gray",
-    "thinkingLow": "sky",
-    "thinkingMedium": "sage",
-    "thinkingHigh": "gold",
-    "thinkingXhigh": "clay",
-    "thinkingMax": "rose",
+    "thinkingMinimal": "grayDim",
+    "thinkingLow": "grayDim",
+    "thinkingMedium": "grayDim",
+    "thinkingHigh": "grayDim",
+    "thinkingXhigh": "grayDim",
+    "thinkingMax": "grayDim",
     "bashMode": "gold"
   }
 }
