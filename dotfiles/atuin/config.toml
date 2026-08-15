@@ -1,0 +1,7 @@
+auto_sync = false
+update_check = false
+search_mode = "daemon-fuzzy"
+
+[daemon]
+enabled = true
+autostart = true

@@ -52,6 +52,9 @@ if ! grep -qF "# Settings imported from https://github.com/91dave/dotfiles" "$HO
     echo 'source ~/.bash_prefs' >> "$HOME/.bashrc"
 fi
 
+echo "atuin config..."
+link atuin/config.toml "$HOME/.config/atuin/config.toml"
+
 echo "Git config..."
 link git/config         "$HOME/.gitconfig"
 link git/config-windows "$HOME/.gitconfig-windows"

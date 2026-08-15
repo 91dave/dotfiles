@@ -17,8 +17,6 @@ screen -r >& /dev/null && \
     echo -e "You have now been logged out of \033[01;33m$(hostname)\033[00m entirely" && \
     exit
 
-set bell-style none
-
 alias time='$(which time) --format="Time: %E CPU: %P RAM: %M kB"'
 
 bash_debug() {
