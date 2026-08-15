@@ -6,6 +6,7 @@ Comprehensive documentation for all helper functions and aliases in `/dotfiles/l
 - [Development Helpers](dev.md)
 - [Git & Worktree Management](git.md)
 - [Kubernetes Helpers](kubernetes.md)
+- [Shell, History & Search](shell.md)
 - [Telepresence Helpers](telepresence.md)
 - [Terraform Helpers](terraform.md)
 - [Shared Agent Config](agents.md)

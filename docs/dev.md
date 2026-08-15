@@ -2,17 +2,7 @@
 
 General development utilities and aliases for working with common tools in a Windows/WSL2 environment.
 
-## Configuration
-
-### WARN_MISSING_HELPERS
-
-Controls whether warnings are shown when optional helper utilities are missing.
-
-```bash
-WARN_MISSING_HELPERS=true  # Default: show warnings
-```
-
-Set to `false` in your shell config to suppress warnings about missing tools like `batcat`, `eza`, or `fzf`.
+Shell-level configuration — history capture and search, the fzf preview setup, and detection of tools like `batcat`, `eza` and `fdfind` — lives in [Shell, History & Search](shell.md), along with the `WARN_MISSING_HELPERS` variable that controls the missing-tool warnings.
 
 ## Aliases
 
@@ -310,6 +300,8 @@ The fzf integration includes custom previews:
 - **Directories**: Shows tree structure using `eza`
 - **CD command**: Shows directory tree when using tab completion
 
+The preview variables and the CTRL+r binding are configured in [Shell, History & Search](shell.md#fzf).
+
 ## Usage Tips
 
 1. **Podman vs Docker**: These scripts use `podman.exe` as it's the preferred container runtime. Docker commands work transparently.
@@ -317,4 +309,4 @@ The fzf integration includes custom previews:
 3. **Path Conversions**: Windows paths are automatically converted using `wslpath` where needed.
 4. **Tool Versions**: All aliased tools use the Windows versions, ensuring consistency across environments.
 5. **Container Engine**: The `ce` command helps manage the container engine. If you see startup warnings, run `ce fix` to start it.
-6. **Helper Utilities**: Install `batcat`, `eza`, and `fzf` for enhanced file browsing and search capabilities. Set `WARN_MISSING_HELPERS=false` if you don't want installation reminders.
+6. **Helper Utilities**: Install `batcat`, `eza`, and `fzf` for enhanced file browsing and search capabilities. Set `WARN_MISSING_HELPERS=false` if you don't want installation reminders. These checks run from [shell.sh](shell.md#optional-tools).
