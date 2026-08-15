@@ -56,8 +56,10 @@ const DEFAULT_SAFE_COMMANDS = new Set([
 	"which", "whereis", "type", "env", "printenv",
 	"uname", "whoami", "id", "date", "cal", "uptime",
 	"ps", "top", "htop", "free",
-	"rg", "fd", "bat", "eza", "jq", "awk",
+	"rg", "fd", "fdfind", "bat", "eza", "jq", "awk",
 	"curl", "web",
+	"dig", "nslookup", "host", "whois", "ping", "traceroute",
+	"man", "tldr", "whatis", "apropos", "info",
 ]);
 
 // --- Safe multi-word patterns (command + subcommand) ---
@@ -72,7 +74,32 @@ const SAFE_SUBCOMMANDS: Array<{ cmd: string; subs: RegExp }> = [
 	{ cmd: "python", subs: /^--version$/i },
 	{ cmd: "dotnet.exe", subs: /^(--version|--list-sdks|--list-runtimes|--info|list)$/i },
 	{ cmd: "sed", subs: /^-n$/i }, // sed -n (print only) is safe
+	{ cmd: "web", subs: /^(search|fetch)$/i },
 ];
+
+const GH_READ_VERBS = /^(view|list|ls|status|diff|checks|log|show)$/i;
+const GH_WRITE_VERBS =
+	/^(create|delete|edit|close|reopen|merge|checkout|clone|fork|rename|archive|unarchive|sync|download|upload|run|cancel|rerun|disable|enable|restore|lock|unlock|pin|unpin|transfer|add|remove|set|develop|ready|comment|review|approve|update)$/i;
+
+// gh is read-only for search, GET/HEAD api calls, and view/list-style verbs.
+function classifyGh(firstArg: string, secondArg: string, segment: string): CommandSafety {
+	const noun = firstArg.toLowerCase();
+
+	if (noun === "search") return "safe";
+
+	if (noun === "api") {
+		const method = segment.match(/(?:-X|--method)[=\s]+([A-Za-z]+)/i);
+		if (method) return /^(get|head)$/i.test(method[1]) ? "safe" : "destructive";
+		return /(^|\s)(-f|--field|-F|--raw-field|--input)(\s|=)/.test(segment)
+			? "destructive"
+			: "safe";
+	}
+
+	if (GH_WRITE_VERBS.test(secondArg)) return "destructive";
+	if (GH_READ_VERBS.test(secondArg)) return "safe";
+
+	return "unknown";
+}
 
 // Safe if the command starts with these prefixes
 const DEFAULT_SAFE_PREFIXES = [
@@ -198,6 +225,10 @@ function classifySegment(segment: string): CommandSafety {
 	if (!cmd) return "unknown";
 
 	const cmdLower = cmd.toLowerCase();
+
+	if (cmdLower === "gh" || cmdLower === "gh.exe") {
+		return classifyGh(firstArg, secondArg, segment);
+	}
 
 	// --- Destructive checks ---
 

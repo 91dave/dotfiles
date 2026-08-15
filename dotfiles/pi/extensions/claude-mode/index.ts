@@ -251,6 +251,12 @@ Restrictions:
 - Bash commands are restricted to read-only operations
 - Do NOT use bash to write files (no redirects, no tee, no sed -i, etc.)
 
+Research IS allowed — use it freely to inform the plan:
+- \`web search "..."\` and \`web fetch <url>\` to search the web and read pages
+- read-only \`gh\` commands: \`gh search code/repos/issues/prs\`, \`gh api <path>\` (GET),
+  \`gh {repo,pr,issue,run,release} view|list\`
+- \`curl\`, \`dig\`, \`whois\`, \`man\`, and other read-only lookups
+
 Instead of making changes:
 - Describe what changes you would make
 - Show code snippets or diffs of proposed changes
