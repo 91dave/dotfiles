@@ -16,7 +16,8 @@ dotfiles/agents/
   sync-agents.sh    # builds both instruction files + links skills into both agents
   template.md       # the shared system-prompt source (with a {{HARNESS}} placeholder)
   skills/           # personal skills, symlinked into both agents
-    ship-it/  update-dotfiles/  workflow/
+    ci-pipeline/  commit-dotfiles/  docker-security/  resume-pi-work/
+    ship-it/  skill-crafting/  wip/  workflow/
 ```
 
 ## What `sync-agents.sh` does
