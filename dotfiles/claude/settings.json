@@ -1,4 +1,88 @@
 {
+  "askUserQuestionTimeout": "never",
+  "autoMemoryEnabled": false,
+  "effortLevel": "high",
+  "enabledPlugins": {
+    "tmux-agent-sidebar@hiroppy": false
+  },
+  "extraKnownMarketplaces": {
+    "hiroppy": {
+      "source": {
+        "path": "/home/dave/.tmux/plugins/tmux-agent-sidebar",
+        "source": "directory"
+      }
+    }
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "atuin hook claude-code",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "atuin hook claude-code",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "python3 /mnt/c/Code/_docs/docs-claude-helpers/hooks/no-comment-guard.py --allow-single-line --no-azdo-refs",
+            "statusMessage": "Checking for Claude-authored comments",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit|MultiEdit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/agents/hooks/rg-fd-guard.sh",
+            "statusMessage": "Preferring rg/fdfind over grep/find",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "atuin hook claude-code",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "{ echo \"[$(date)] Claude Code Session Startup\"; cd /mnt/c/Code/_docs/docs-claude-helpers && git.exe pull --rebase --ff-only && /mnt/c/Code/_personal/dotfiles/dotfiles/agents/sync-agents.sh ; } > /tmp/claude-session-start.log 2>&1 || true",
+            "statusMessage": "Syncing docs-claude-helpers and rebuilding agents",
+            "timeout": 120,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
+  "model": "opus[1m]",
   "permissions": {
     "allow": [
       "Bash(cli-anything-azdo:*)",
@@ -46,63 +130,11 @@
   "skillOverrides": {
     "work-item-authoring": "user-invocable-only"
   },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 /mnt/c/Code/_docs/docs-claude-helpers/hooks/no-comment-guard.py --allow-single-line --no-azdo-refs",
-            "timeout": 10,
-            "statusMessage": "Checking for Claude-authored comments"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/agents/hooks/rg-fd-guard.sh",
-            "timeout": 10,
-            "statusMessage": "Preferring rg/fdfind over grep/find"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "{ echo \"[$(date)] Claude Code Session Startup\"; cd /mnt/c/Code/_docs/docs-claude-helpers && git.exe pull --rebase --ff-only && /mnt/c/Code/_personal/dotfiles/dotfiles/agents/sync-agents.sh ; } > /tmp/claude-session-start.log 2>&1 || true",
-            "timeout": 120,
-            "statusMessage": "Syncing docs-claude-helpers and rebuilding agents"
-          }
-        ]
-      }
-    ]
-  },
-  "workflowKeywordTriggerEnabled": false,
+  "skipAutoPermissionPrompt": true,
   "statusLine": {
-    "type": "command",
-    "command": "/home/dave/.claude/statusline-detailed.sh"
+    "command": "/home/dave/.claude/statusline-detailed.sh",
+    "type": "command"
   },
-  "enabledPlugins": {
-    "tmux-agent-sidebar@hiroppy": false
-  },
-  "extraKnownMarketplaces": {
-    "hiroppy": {
-      "source": {
-        "source": "directory",
-        "path": "/home/dave/.tmux/plugins/tmux-agent-sidebar"
-      }
-    }
-  },
-  "effortLevel": "high",
-  "askUserQuestionTimeout": "never",
   "tui": "fullscreen",
-  "autoMemoryEnabled": false,
-  "skipAutoPermissionPrompt": true
+  "workflowKeywordTriggerEnabled": false
 }
