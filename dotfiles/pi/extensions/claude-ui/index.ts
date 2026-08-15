@@ -65,7 +65,8 @@ function windowLabel(window: number | undefined): string {
 function makeDiffTracker(cwd: string) {
   let add = 0;
   let del = 0;
-  const refresh = () =>
+  let branch: string | null = null;
+  const refresh = () => {
     execFile(
       "git",
       ["diff", "--shortstat", "HEAD"],
@@ -80,8 +81,22 @@ function makeDiffTracker(cwd: string) {
         del = Number(/(\d+) deletion/.exec(stdout)?.[1] ?? 0);
       },
     );
+    execFile(
+      "git",
+      ["rev-parse", "--abbrev-ref", "HEAD"],
+      { cwd, timeout: 2000 },
+      (err, stdout) => {
+        if (err) {
+          branch = null;
+          return;
+        }
+        const b = stdout.trim();
+        branch = b === "HEAD" ? "detached" : b || null;
+      },
+    );
+  };
   refresh();
-  return { get: () => ({ add, del }), refresh };
+  return { get: () => ({ add, del, branch }), refresh };
 }
 
 export default function (pi: ExtensionAPI) {
@@ -152,7 +167,11 @@ export default function (pi: ExtensionAPI) {
           const pct = Number(pctNum.toFixed(1)).toString();
 
           const now = formatDuration(Date.now() - sessionStart);
-          const { add, del } = diffRef?.get() ?? { add: 0, del: 0 };
+          const { add, del, branch } = diffRef?.get() ?? {
+            add: 0,
+            del: 0,
+            branch: null,
+          };
           const wl = windowLabel(window);
 
           const seg: string[] = [];
@@ -175,10 +194,17 @@ export default function (pi: ExtensionAPI) {
 
           const pad = "  ";
           const lines = [truncateToWidth(pad + seg.join("  "), width)];
+
+          const line2: string[] = [];
           const statuses = footerData.getExtensionStatuses?.();
           if (statuses && statuses.size > 0) {
-            const modeLine = Array.from(statuses.values()).join("  ");
-            lines.push(truncateToWidth(pad + modeLine, width));
+            line2.push(Array.from(statuses.values()).join("  "));
+          }
+          if (branch) {
+            line2.push(theme.fg("success", `🌿 ${branch}`));
+          }
+          if (line2.length > 0) {
+            lines.push(truncateToWidth(pad + line2.join("  "), width));
           }
           return lines;
         },
