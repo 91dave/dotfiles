@@ -17,6 +17,7 @@ pi-specific dotfiles live under `dotfiles/pi/` and install to `~/.pi/agent/`:
 | `extensions/subagent/agents.ts` | Agent discovery logic (reads from `~/.pi/agent/agents/` and `agentDirs` in settings) |
 | `extensions/permission-gate.ts` | Prompts for confirmation before running gated bash commands (configured via `permissionGate` in settings) |
 | `extensions/claude-mode/` | Cyclable operating modes (auto / accept-edits / plan) with an at-a-glance mode line, modelled on Claude Code. Removes edit/write tools and classifies bash commands in plan mode; blocks `git commit`/`push` in accept-edits (configured via `claudeMode` in settings) |
+| `extensions/claude-ui/` | Claude Code look-alike footer — a status line carrying model, folder, token use, cost, elapsed time and the working-tree diff, with extension statuses and the current git branch on a second line |
 | `extensions/reset-title-on-exit.ts` | Resets terminal title on exit (pi sets it but doesn't clear it) |
 
 The shared system-prompt source (`template.md`) and personal skills now live under
@@ -79,8 +80,9 @@ To gate additional commands, add more entries to the array (e.g. `rm -rf`, `kube
 Explicit, cyclable operating modes modelled on Claude Code's shift+tab cycle. pi's
 native behaviour is full access; this makes the current posture visible via a mode
 line published as an extension status. With the `claude-ui` footer active it renders
-on a second line directly beneath the `[model]` status line (matching Claude); with
-the built-in footer it appears inline. Three modes cycle in order:
+on a second line directly beneath the `[model]` status line (matching Claude), sharing
+that line with the current git branch (`🌿 main`); with the built-in footer it appears
+inline. Three modes cycle in order:
 
 | Mode | Line | Behaviour |
 |------|------|-----------|
