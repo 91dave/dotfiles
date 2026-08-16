@@ -77,8 +77,12 @@ where its content comes from, and what happens after approval differ.
 
    Print the URL it returns and ask for approval or amendments. Run it in the
    background so the session stays usable, and keep it running while the user
-   reads — stopping it kills the URL. Stop the previous server before serving a
-   new plan; nothing reaps them.
+   reads — stopping it kills the URL, though not the page already open in their
+   browser.
+
+   It serves on `7842` and stops itself after 30 minutes with no requests, so
+   one plan at a time needs no cleanup. If that port is taken it warns and uses
+   a free one, which usually means an earlier plan is still being served.
 
 6. **Iterate, then close.** Amendments are edits to the same file. The server
    renders per request, so the user reloads to see them; no rebuild, no restart.
@@ -163,12 +167,18 @@ Run with `node`; there is nothing to install.
 |---|---|
 | `node <skill-dir>/lib/serve.mjs ~/.claude/plans/<name>.md` | Serve the harness plan file, in plan mode |
 | `node <skill-dir>/lib/serve.mjs .plans/<slug>` | Serve a plan folder, outside plan mode |
-| `... <target> --port 8123` | Fixed port instead of a free one |
+| `... <target> --port 8123` | Override the default `7842` |
+| `... <target> --idle 60` | Idle minutes before it stops; `0` runs until stopped |
 | `... <target> --out plan.html` | Write a standalone file to share or attach. **Writes to disk, so never in plan mode** |
 | `node --test <skill-dir>/lib/render.test.mjs` | Self-check after changing the renderer |
 
 The target may be a `.md` file, a `.mdx` file, or a directory containing
 `plan.mdx`. Everything except `--out` only reads.
+
+Servers stop themselves after 30 idle minutes, so they do not accumulate across
+sessions. Do not hunt down and kill old ones by process name: that pattern
+matches other sessions' servers and other people's work. If a port genuinely
+needs freeing, find the listener with `ss -tlnp` and stop that one process.
 
 The MDX is evaluated to render it, so only ever point these at a plan this skill
 produced. Never at a file from an untrusted source.
