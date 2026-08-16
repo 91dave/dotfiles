@@ -22,14 +22,22 @@ Nothing to install beyond Node.
 
 ```sh
 node lib/serve.mjs .plans/my-plan              # render and serve, prints the URL
+node lib/serve.mjs ~/.claude/plans/foo.md      # a file works too
 node lib/serve.mjs .plans/my-plan --port 8123  # fixed port
 node lib/serve.mjs .plans/my-plan --out plan.html
 node --test lib/render.test.mjs                # after changing the renderer
 ```
 
-The server renders on every request, so editing the MDX and reloading is the
-whole iteration loop. `--out` writes a standalone file you can attach to a work
-item or email.
+The target can be a `.md` file, a `.mdx` file, or a directory containing
+`plan.mdx`. The server renders on every request, so editing the source and
+reloading is the whole iteration loop. `--out` writes a standalone file you can
+attach to a work item or email.
+
+**In plan mode** the skill writes to the harness plan file rather than the repo,
+serves that, and uses `ExitPlanMode` as the approval gate. Serving only reads, so
+it does not breach the plan-mode contract; `--out` is the one thing that writes,
+so it is not used there. Plan mode is the better host, because the read-only
+research gate and the approval gate are both enforced rather than self-imposed.
 
 ## How local is it
 

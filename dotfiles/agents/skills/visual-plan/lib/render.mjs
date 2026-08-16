@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Marked } from "../assets/marked.esm.js";
@@ -21,6 +21,12 @@ export const MERMAID = {
 };
 
 const placeholderToken = (index) => `vpblockmarker${index}end`;
+
+export function resolvePlanSource(target) {
+  return /\.mdx?$/.test(target)
+    ? resolve(target)
+    : resolve(target, "plan.mdx");
+}
 
 export async function loadAssets() {
   const [highlightJs, lightCss, darkCss, planCss] = await Promise.all([

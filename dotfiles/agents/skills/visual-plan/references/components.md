@@ -16,8 +16,13 @@ workItem: AB#12345
 ```
 
 `title` becomes the page title and heading. `brief` is a one-line summary under
-it. `workItem` renders as a chip and is omitted for standalone plans. Values are
-plain text, not markdown, and quotes are stripped.
+it. `workItem` renders as a chip and is omitted when there is no backlog item.
+Values are plain text, not markdown, and quotes are stripped.
+
+The file is `.plans/<slug>/plan.mdx` normally, and the harness plan file
+(`~/.claude/plans/<name>.md`) when running in plan mode. The format is identical:
+the renderer accepts `.md` and `.mdx` alike, and the extension changes nothing
+about what you write.
 
 Do not open the body with an `# H1` repeating the title. Start at `##`.
 

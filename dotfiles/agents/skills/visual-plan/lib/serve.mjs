@@ -2,11 +2,11 @@ import { createServer } from "node:http";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { loadAssets, renderFile } from "./render.mjs";
+import { loadAssets, renderFile, resolvePlanSource } from "./render.mjs";
 
 const USAGE = `Usage:
-  node lib/serve.mjs <plan-dir-or-mdx> [--port <n>]   serve and print a URL
-  node lib/serve.mjs <plan-dir-or-mdx> --out <file>   write standalone HTML
+  node lib/serve.mjs <plan-dir-or-file> [--port <n>]   serve and print a URL
+  node lib/serve.mjs <plan-dir-or-file> --out <file>   write standalone HTML
 `;
 
 function parseArgs(argv) {
@@ -21,10 +21,6 @@ function parseArgs(argv) {
   return { target: positional[0], ...options };
 }
 
-function planPath(target) {
-  return target.endsWith(".mdx") ? resolve(target) : resolve(target, "plan.mdx");
-}
-
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help || !args.target) {
@@ -32,7 +28,7 @@ if (args.help || !args.target) {
   process.exit(args.target ? 0 : 1);
 }
 
-const source = planPath(args.target);
+const source = resolvePlanSource(args.target);
 const assets = await loadAssets();
 
 if (args.out) {

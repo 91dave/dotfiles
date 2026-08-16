@@ -8,37 +8,48 @@ argument-hint: "<request> [AB#<backlog-item-id>]"
 
 Turn the plan you would normally write as chat prose into a document someone can
 actually review: mermaid diagrams, a file tree of what the change touches,
-syntax-highlighted code, and an ordered task breakdown. Written as MDX to
-`.plans/<slug>/`, rendered locally, served on `127.0.0.1`.
+syntax-highlighted code, and an ordered task breakdown. Written as MDX, rendered
+locally, served on `127.0.0.1`.
 
 Nothing is published, shared, or written to any hosted service.
 
-## Do not invoke inside plan mode
-
-This skill writes files and starts a server. Plan mode blocks both. If you are in
-plan mode when the skill is invoked, leave it first.
-
-That includes the `/plan-tasks` case below: `/plan-tasks` Step 2 says to do the
-design work in plan mode with `ExitPlanMode` as the Step 5 gate. When
-`/visual-plan` is part of the invocation, **skip plan mode entirely**. The served
-plan is the gate, and approval comes back through the TUI.
-
-The read-only discipline still applies, it is just carried here rather than by
-the harness: research without editing, and write nothing outside
-`.plans/<slug>/` until the plan is approved.
-
 ## Read the situation
 
-Work out which of these you are in before doing anything else, and say which in
-one line so the user can correct you:
+Two independent questions, answered before anything else. State both in one line
+so the user can correct you.
+
+### Are you in plan mode?
+
+This decides where the plan is written and how it is approved. Never switch mode
+either way: adapt to where you already are.
+
+| | In plan mode | Outside plan mode |
+|---|---|---|
+| Plan file | the harness plan file, `~/.claude/plans/<name>.md` | `.plans/<slug>/plan.mdx` |
+| Slug | handed to you; do not invent one | derive it, or reuse `/plan-tasks`'s plan name |
+| Read-only research | enforced by the harness | your responsibility |
+| Approval | `ExitPlanMode` | ask in chat |
+| `--out` | **never** — it writes a file | fine |
+
+**Plan mode works, and is the better host.** The MDX format is unaffected by the
+`.md` extension. Serving only reads, so it does not breach the plan-mode
+contract; `--out` is the one code path that writes, which is why it is barred
+there. Starting the server is a `Bash` call and may raise a permission prompt
+depending on the user's setup — that is expected, not a failure.
+
+`ExitPlanMode` echoes the raw file to the terminal, so component tags appear
+there as literal text. That is cosmetic. The browser is the review surface, so do
+not strip components to make the echo tidier.
+
+### What is the plan for?
 
 | Signal | Situation |
 |---|---|
 | `/plan-tasks` in the invocation, or an `AB#` alongside it | **Draft surface** for `/plan-tasks` Step 5 |
 | a request and nothing else | **Standalone**: the MDX is the plan |
 
-Steps 1 to 6 below are the same either way. Only where the content comes from,
-and what happens after approval, differ.
+The six steps below are the same in every combination. Only the plan's location,
+where its content comes from, and what happens after approval differ.
 
 ## Workflow
 
@@ -51,27 +62,32 @@ and what happens after approval, differ.
    change the design and cannot be resolved from the code. Everything still open
    after that is stated in the plan as an explicit assumption with a
    recommendation, not left implicit.
-3. **Pick the slug.** Short, kebab-case, three to five words. In `/plan-tasks`
-   mode use the plan name it already derived, verbatim.
-4. **Write `.plans/<slug>/plan.mdx`.** See `references/components.md` for the
-   component set and `references/document-quality.md` for the bar the document
-   has to clear.
+3. **Settle the plan file.** In plan mode it is the harness plan file, already
+   named — use it and do not invent a slug. Outside plan mode, pick a short
+   kebab-case slug of three to five words and use `.plans/<slug>/plan.mdx`, or
+   reuse `/plan-tasks`'s plan name verbatim when it has one.
+4. **Write the MDX.** See `references/components.md` for the component set and
+   `references/document-quality.md` for the bar the document has to clear. In
+   plan mode the harness file is the only file you may write.
 5. **Serve it and hand off.**
 
    ```bash
-   node <skill-dir>/lib/serve.mjs .plans/<slug>
+   node <skill-dir>/lib/serve.mjs <plan-file-or-dir>
    ```
 
    Print the URL it returns and ask for approval or amendments. Run it in the
    background so the session stays usable, and keep it running while the user
-   reads — stopping it kills the URL.
+   reads — stopping it kills the URL. Stop the previous server before serving a
+   new plan; nothing reaps them.
 
-6. **Iterate.** Amendments are edits to `plan.mdx`. The server renders per
-   request, so the user reloads to see them; no rebuild, no restart. Edit the
-   block that changed, never regenerate the file.
+6. **Iterate, then close.** Amendments are edits to the same file. The server
+   renders per request, so the user reloads to see them; no rebuild, no restart.
+   Edit the block that changed, never regenerate the file. In plan mode, call
+   `ExitPlanMode` once the user is happy: the served plan is what they approved.
 
-Add `.plans/` to the repo's `.gitignore`. Plans are working artefacts. Azure
-DevOps is the record.
+Outside plan mode, add `.plans/` to the repo's `.gitignore`. Plans are working
+artefacts. Azure DevOps is the record. In plan mode the harness file is the
+artefact, and no copy is written into the repo.
 
 ## Alongside `/plan-tasks`
 
@@ -87,6 +103,12 @@ Expected invocation:
 | 5 present the draft for approval | **this skill** |
 | 6 write parent notes and child Tasks to AzDO, set Type and StackRank | `/plan-tasks` |
 
+**Run this in plan mode.** `/plan-tasks` Step 2 says the requirements-in-BLI
+context does its design work in plan mode with `ExitPlanMode` as the Step 5 gate.
+Follow that as written: research under the harness gate, write the MDX to the
+harness plan file, serve it, and let `ExitPlanMode` be the approval. Step 6 then
+writes to Azure DevOps once you are out.
+
 Rules for the seam:
 
 - **Render what will actually be written.** The `<Tasks>` items carry the fields
@@ -101,9 +123,10 @@ Rules for the seam:
 
 ## Standalone
 
-Plan from the request. Derive the slug yourself, run the same six steps, end at
-approval. Here the MDX is not a rendering of something held elsewhere: it is the
-plan, and the only artefact.
+Plan from the request and run the same six steps, ending at approval. Here the
+MDX is not a rendering of something held elsewhere: it is the plan, and the only
+artefact. In plan mode that is the harness file; outside it, derive a slug and
+use `.plans/<slug>/plan.mdx`.
 
 Include a `<Tasks>` block only when the work genuinely has an ordered breakdown.
 A design note or an investigation write-up does not need one.
@@ -138,13 +161,17 @@ Run with `node`; there is nothing to install.
 
 | Command | Purpose |
 |---|---|
-| `node <skill-dir>/lib/serve.mjs .plans/<slug>` | Render and serve; prints the URL |
-| `node <skill-dir>/lib/serve.mjs .plans/<slug> --port 8123` | Fixed port instead of a free one |
-| `node <skill-dir>/lib/serve.mjs .plans/<slug> --out plan.html` | Write a standalone file to share or attach |
+| `node <skill-dir>/lib/serve.mjs ~/.claude/plans/<name>.md` | Serve the harness plan file, in plan mode |
+| `node <skill-dir>/lib/serve.mjs .plans/<slug>` | Serve a plan folder, outside plan mode |
+| `... <target> --port 8123` | Fixed port instead of a free one |
+| `... <target> --out plan.html` | Write a standalone file to share or attach. **Writes to disk, so never in plan mode** |
 | `node --test <skill-dir>/lib/render.test.mjs` | Self-check after changing the renderer |
 
-The MDX is evaluated to render it, so only ever point these at a plan folder this
-skill produced. Never at an MDX file from an untrusted source.
+The target may be a `.md` file, a `.mdx` file, or a directory containing
+`plan.mdx`. Everything except `--out` only reads.
+
+The MDX is evaluated to render it, so only ever point these at a plan this skill
+produced. Never at a file from an untrusted source.
 
 ## References
 
