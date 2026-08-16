@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MERMAID, loadAssets, renderMdx } from "./render.mjs";
+import { resolve } from "node:path";
+
+import {
+  MERMAID,
+  loadAssets,
+  renderMdx,
+  resolvePlanSource,
+} from "./render.mjs";
 
 const assets = await loadAssets();
 
@@ -15,6 +22,38 @@ const renderBody = async (source, frontmatter) => {
 
 const count = (haystack, needle) =>
   (haystack.match(new RegExp(needle, "g")) ?? []).length;
+
+test("a .md plan file resolves as-is, so plan mode's harness file works", () => {
+  assert.equal(
+    resolvePlanSource("/home/dave/.claude/plans/playful-melody.md"),
+    "/home/dave/.claude/plans/playful-melody.md",
+  );
+});
+
+test("a .mdx plan file resolves as-is", () => {
+  assert.equal(
+    resolvePlanSource("/tmp/plans/thing/plan.mdx"),
+    "/tmp/plans/thing/plan.mdx",
+  );
+});
+
+test("a directory resolves to plan.mdx inside it", () => {
+  assert.equal(
+    resolvePlanSource("/tmp/repo/.plans/my-plan"),
+    "/tmp/repo/.plans/my-plan/plan.mdx",
+  );
+});
+
+test("an extensionless path is treated as a directory", () => {
+  assert.equal(resolvePlanSource(".plans/my-plan"), resolve(".plans/my-plan/plan.mdx"));
+});
+
+test("a path whose directory merely contains a dot is not mistaken for a file", () => {
+  assert.equal(
+    resolvePlanSource("/tmp/repo/v1.2/my-plan"),
+    "/tmp/repo/v1.2/my-plan/plan.mdx",
+  );
+});
 
 test("frontmatter sets the title and work item chip", async () => {
   const html = await render("Body.", "title: Storage\nworkItem: AB#12345");
