@@ -1,75 +1,81 @@
 # /visual-plan
 
-Turn ordinary implementation plans into rich visual review surfaces, entirely on
-your own machine.
+Render an implementation plan as a document someone can actually review, entirely
+on your own machine.
 
-`/visual-plan` turns the plan an agent would normally write in chat into a
-human-optimized MDX document written to `.plans/<slug>/` and served for review.
-Instead of a long wall of prose, reviewers get components built for
-understanding: architecture diagrams, wireframes, file maps, annotated code,
-OpenAPI-style API specs, visual schema maps, and open questions.
+The agent writes the plan as MDX to `.plans/<slug>/`, renders it, and serves it on
+`127.0.0.1`. You review in the browser and approve or ask for changes in the
+terminal.
 
-It solves for plans that are too important to bury in chat. The output is
-scannable and intuitive enough for a human to approve before code changes start.
+## What you get
 
-## What It Does
+- **Mermaid diagrams** for architecture, data flow and state.
+- **File trees** showing what the change touches, with change badges and notes.
+- **Syntax-highlighted code** with filename headers.
+- **A typed task breakdown** with dependencies, and a dependency graph derived
+  from them.
+- Prose, headings, tables and lists, because it is markdown underneath.
 
-- Grounds plans in real repo files, schemas, actions, and symbols.
-- Chooses the right visual surface: document-only, or a wireframe canvas for
-  UI work.
-- Uses MDX and custom components for diagrams, UI states, API specs, schema
-  maps, diffs, code annotations, and reviewer questions.
-- Renders the result as a reviewable document instead of inline chat Markdown.
-- Keeps the plan as the approval gate before source edits begin.
+## Running it
 
-## When To Use It
-
-Use it for multi-file, ambiguous, risky, architecture-heavy, data-heavy, or
-UI-heavy work where the wrong direction would be expensive. It is also useful
-when a pasted text plan needs a richer review surface.
-
-Skip it for trivial fixes, single-line changes, or anything whose diff is easier
-to review than a plan.
-
-## How It Runs
-
-Everything is local. The plan is authored as MDX in `.plans/<slug>/` and
-rendered through a localhost bridge started by the Agent-Native CLI:
+Nothing to install beyond Node.
 
 ```sh
-npx @agent-native/core@latest plan blocks --out plan-blocks.md
-npx @agent-native/core@latest plan local init --title "My plan" --kind plan --dir .plans/my-plan
-npx @agent-native/core@latest plan local check --dir .plans/my-plan
-npx @agent-native/core@latest plan local serve --dir .plans/my-plan --kind plan --open
+node lib/serve.mjs .plans/my-plan              # render and serve, prints the URL
+node lib/serve.mjs .plans/my-plan --port 8123  # fixed port
+node lib/serve.mjs .plans/my-plan --out plan.html
+node --test lib/render.test.mjs                # after changing the renderer
 ```
 
-Requirements: Node and `npx`. No account, no sign-in, no MCP connector, no API
-key.
+The server renders on every request, so editing the MDX and reloading is the
+whole iteration loop. `--out` writes a standalone file you can attach to a work
+item or email.
 
-**"Local" means plan content never leaves the machine — not that it is
-offline.** The CLI comes from npm, the block catalog is a public schema-only
-route, and `plan local serve` opens the Plan renderer hosted at
-`plan.agent-native.com`, which reads your MDX over the loopback bridge in the
-browser. Nothing is written to their database and there is no share link. For a
-genuinely offline render, run a local Plan app and pass
-`--app-url http://localhost:8096`. `references/local-workflow.md` sets out the
-boundary in full.
+## How local is it
+
+Plans are never uploaded, shared, or written to any hosted service. There is no
+account, no sign-in, and no MCP connector.
+
+One qualifier, stated plainly: **mermaid is loaded from a CDN**, because the
+bundle is 3.4 MB and too large to vendor sensibly. That script tag is emitted
+**only when a plan actually contains a diagram**, is pinned to an exact version,
+and carries a Subresource Integrity hash so the browser refuses to run
+unexpected bytes.
+
+A plan with no diagrams has zero external URLs and works with the network
+disabled. A plan with diagrams degrades to readable diagram source if the CDN is
+blocked, rather than showing an empty box.
+
+`assets/LICENSES.md` covers the vendored libraries and how to regenerate the
+integrity hash on a version bump.
+
+## Alongside /plan-tasks
+
+The main use is as the approval surface for `/plan-tasks`:
+
+```
+/plan-tasks AB#12345 /visual-plan
+```
+
+`/plan-tasks` designs the typed task breakdown, `/visual-plan` renders it for
+review, and on approval `/plan-tasks` writes the child Tasks to Azure DevOps.
+This skill never writes to Azure DevOps itself.
+
+Invoked on its own it plans from the prompt, and the MDX is the plan artefact in
+its own right.
 
 ## Provenance
 
-This is a local-only fork of the `visual-plan` skill from
+A local-only fork of the `visual-plan` skill from
 [BuilderIO/skills](https://github.com/BuilderIO/skills/tree/main/skills/visual-plan),
-built on [Agent-Native](https://github.com/BuilderIO/agent-native/).
+built on [Agent-Native](https://github.com/BuilderIO/agent-native/). Both MIT.
 
-Removed from the original:
+The original published through a hosted Plan app over an MCP connector. What
+survives is the planning discipline and the document quality bar; the renderer is
+new and local.
 
-- The hosted Plan MCP connector and its fourteen tools (`create-visual-plan`,
-  `update-visual-plan`, `get-plan-feedback`, `export-visual-plan`, and the rest).
-- OAuth setup, per-client reconnect steps, and auth error handling.
-- Visibility, sharing, and hosted comment/anchor handling.
-- Prototype-first and design-first modes, which needed renderer features beyond
-  static wireframes.
-
-Kept and retargeted: the plan-discipline rules and the wireframe, canvas,
-document-quality, and exemplar guidance, which were always renderer-agnostic and
-are the bulk of the skill's value.
+Removed along the way: the MCP connector and its fourteen tools, OAuth and
+per-client reconnect handling, hosted comments and comment anchoring, sharing and
+visibility controls, the wireframe canvas and prototype modes, and the in-document
+question form. Clarifying questions are now asked in the terminal before the plan
+is written, which is a faster loop and loses nothing.
