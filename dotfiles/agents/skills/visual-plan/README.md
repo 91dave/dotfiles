@@ -33,6 +33,13 @@ The target can be a `.md` file, a `.mdx` file, or a directory containing
 reloading is the whole iteration loop. `--out` writes a standalone file you can
 attach to a work item or email.
 
+It serves on `7842` by default and **stops itself after 30 idle minutes**, so
+servers do not pile up across sessions. Each request resets the clock, and
+`--idle 0` disables it. If `7842` is busy it warns and takes a free port, which
+usually means an earlier plan is still up. Losing the server does not lose the
+page you are reading: the HTML is self-contained and already in the browser, so
+only reload stops working.
+
 **In plan mode** the skill writes to the harness plan file rather than the repo,
 serves that, and uses `ExitPlanMode` as the approval gate. Serving only reads, so
 it does not breach the plan-mode contract; `--out` is the one thing that writes,
