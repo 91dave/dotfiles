@@ -1,57 +1,57 @@
-# Good vs. bad exemplar — single source of truth
+# Worked example, and the anti-patterns
 
-This file is the canonical worked example of a great plan (and the anti-patterns
-to avoid). Read it alongside the document-quality and canvas references before
-authoring a plan; it is the bar these plans must clear.
+## Good: a backend migration plan
 
-**GOOD.** A UI-first plan for a todo app: a canvas with a `desktop` artboard whose
-`data.html` is a real flex layout — a sidebar of links (`Inbox 12`, `Today 4`,
-`Done`), a main column with an `<h1>Today</h1>`, accent `.wf-pill`s for the
-filters, a muted section label `OVERDUE`, and `.wf-card` task rows carrying real
-titles, due dates, and a primary `button.primary` — styled only through bare
-elements, helper classes, and `--wf-*` tokens, so the renderer applies the
-correct desktop footprint, theme, and one subtle whole-frame wobble. Plain-text
-designer notes sit spaced off the frame, pointing only at the controls that need
-explanation. Below it, a Claude/Codex-grade document: objective and
-done-criteria, a few `code` blocks (grouped in a vertical `tabs` block when
-more than one) showing the real shape of the load-bearing files, a `callout`
-with `tone="decision"` stating the chosen approach with a `columns` block
-weighing the two real options behind it,
-and a validation step — none of it repeating the canvas. If the task also
-changes a multi-step completion flow, the same canvas carries one artboard per
-step, using consistent labels and states throughout. This is the bar.
+Opens with the objective in two sentences and what done means. Then a
+`decision` callout naming the approach and the alternative it beat, with the
+reason. A `mermaid` flowchart of the read path showing the flag branch and the
+fallback, because that branching is the thing a reviewer needs to check and it
+does not read as prose.
 
-**GOOD.** A broad product-architecture plan opens with a plain recommendation
-and one concrete app state before the abstraction. The first canvas artboard is
-pure product UI that matches the current app shell; nearby notes explain the
-user-visible delta. A separate diagram below shows the mechanics, such as file
-or data flow. The document then separates the reusable core from app/provider
-adapters and examples, covers contracts, folder or schema shape, sync
-boundaries, roadmap, non-goals, a bottom Open Questions form for unresolved
-decisions, and a verification section with at least one realistic end-to-end
-smoke. A reviewer who was not in the chat gets the idea from the top snapshot
-before reading the technical plan.
+A `<FileTree>` of the four files that matter, with a note on the one branch that
+actually moves and nothing on the obvious test file. One code fence with
+`title=StorageResolver.cs` showing the six lines that change, not the class.
 
-**GOOD.** A `/visual-plan` for a backend architecture review: no top canvas.
-The document opens with context and a legend, then repeats recommendation cards:
-title, confidence/category badges, a monospace grid of real file paths, one
-inline two-dimensional before/after or layered architecture diagram, and terse
-Problem/Solution/Why bullets using the codebase's vocabulary. The diagram uses
-space to show boundaries, layers, and ownership; it is not a default
-left-to-right chain. The plan ends with a top recommendation and a bottom
-question-form only if the next architecture direction is genuinely open. This is
-better than a top canvas because each diagram is local to the claim it supports.
+A `<Tasks>` block with three items in execution order: the regression Test task
+first, the Functional task depending on it, the Documentation task last. Each
+carries an objective and success criteria; the dependency graph beneath is
+derived, not written.
 
-**BAD.** A `data.html` with hard-coded hex colors, a `font-family`, or fixed
-pixel width/height; gray placeholder bars "insinuating" text on a non-skeleton
-frame; a forced desktop + mobile pair for a popover; floating bordered
-annotation cards hugging the frames; a fresh hand-authored kit-tree `screen`
-instead of `html`; a multi-step UI flow collapsed into a single artboard; a
-mockup escaped into a document `custom-html` block; and a marketing-style
-document with a hero heading and value props that just restates what the canvas
-already shows. Also bad: an architecture-only plan forced into a top canvas of
-labeled boxes with overlapping text, where the actual code evidence and
-recommendations live elsewhere; a product wireframe that mixes a real screen
-with repo names, file-contract arrows, architecture explanations, or a made-up
-permanent inspector; and a plan that describes itself as a revision of a prior
-conversation instead of a standalone proposal. Never produce this.
+Closes with verification that names the container suite command and one manual
+check against the real bucket. A reviewer who was not in the chat can approve or
+push back without asking a question.
+
+## Good: a small design note
+
+Objective, two options as a markdown table, a `decision` callout committing to
+one, and three paragraphs on the consequences. No diagram, because the
+relationship is a straight choice. No `<Tasks>`, because it is one change.
+
+Short is not lazy. This plan is right because everything it leaves out would have
+been padding.
+
+## Bad
+
+A hero heading and a paragraph on why the work matters before saying what it is.
+
+A `mermaid` diagram that redraws the numbered list directly above it, or a
+left-to-right chain of three boxes labelled Start, Process, End.
+
+A `<FileTree>` listing all thirty touched files with no notes, so the reader
+cannot tell which two carry the change.
+
+A code fence pasting an entire class, or one with no `title=` so the reader has
+to guess the file.
+
+Six callouts in a row, none of which record a decision.
+
+A `<Tasks>` block on a one-commit change, or tasks whose `successCriteria` say
+"works correctly".
+
+A step reading "update the service as required". A plan that says "as discussed
+above" or "unlike the previous version". A bottom "Open Questions" wall
+collecting decisions that should have been asked in the TUI before the document
+was written.
+
+A plan handed over without opening the URL, so the reviewer is the one who finds
+the raw `<Tasks items={[` text where a component should have rendered.
