@@ -72,6 +72,8 @@ body {
   letter-spacing: 0.02em;
 }
 .vp-chip--muted { background: var(--surface); color: var(--muted); }
+a.vp-chip { text-decoration: none; }
+a.vp-chip:hover { background: var(--am-red); }
 
 h2 {
   margin: 2.75rem 0 1rem;

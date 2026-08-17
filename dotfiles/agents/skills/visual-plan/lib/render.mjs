@@ -168,14 +168,23 @@ export async function renderMdx(source, assets) {
   return wrapDocument({ meta, html, assets, usesMermaid: usesMermaid.value });
 }
 
+const AZDO_WORK_ITEM_URL =
+  "https://dev.azure.com/AMDigitalTech/Technology/_workitems/edit/";
+
+function workItemChip(workItem) {
+  const label = escapeHtml(workItem);
+  const id = /^AB#(\d+)$/i.exec(workItem.trim())?.[1];
+  return id
+    ? `<a class="vp-chip" href="${AZDO_WORK_ITEM_URL}${id}">${label}</a>`
+    : `<span class="vp-chip">${label}</span>`;
+}
+
 function wrapDocument({ meta, html, assets, usesMermaid }) {
   const title = meta.title ?? "Plan";
   const brief = meta.brief
     ? `<p class="vp-brief">${escapeHtml(meta.brief)}</p>`
     : "";
-  const item = meta.workItem
-    ? `<span class="vp-chip">${escapeHtml(meta.workItem)}</span>`
-    : "";
+  const item = meta.workItem ? workItemChip(meta.workItem) : "";
 
   const mermaidTag = usesMermaid
     ? `<script src="${MERMAID.src}" integrity="${MERMAID.integrity}" crossorigin="anonymous"></script>

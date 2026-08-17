@@ -61,6 +61,19 @@ test("frontmatter sets the title and work item chip", async () => {
   assert.match(html, /AB#12345/);
 });
 
+test("an AB# work item links to Azure DevOps", async () => {
+  const html = await render("Body.", "title: Storage\nworkItem: AB#12345");
+  assert.match(
+    html,
+    /<a class="vp-chip" href="https:\/\/dev\.azure\.com\/AMDigitalTech\/Technology\/_workitems\/edit\/12345">AB#12345<\/a>/,
+  );
+});
+
+test("a work item that is not an AB# reference stays unlinked", async () => {
+  const html = await render("Body.", "title: Storage\nworkItem: Spike");
+  assert.match(html, /<span class="vp-chip">Spike<\/span>/);
+});
+
 test("markdown renders as normal prose", async () => {
   const body = await renderBody("## Heading\n\nSome **bold** text.");
   assert.match(body, /<h2[^>]*>Heading<\/h2>/);

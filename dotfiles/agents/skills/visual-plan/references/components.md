@@ -16,8 +16,9 @@ workItem: AB#12345
 ```
 
 `title` becomes the page title and heading. `brief` is a one-line summary under
-it. `workItem` renders as a chip and is omitted when there is no backlog item.
-Values are plain text, not markdown, and quotes are stripped.
+it. `workItem` renders as a chip and is omitted when there is no backlog item; an
+`AB#12345` value links to the item in Azure DevOps, and anything else renders as a
+plain chip. Values are plain text, not markdown, and quotes are stripped.
 
 The file is `.plans/<slug>/plan.mdx` normally, and the harness plan file
 (`~/.claude/plans/<name>.md`) when running in plan mode. The format is identical:
