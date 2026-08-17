@@ -111,6 +111,8 @@ function _init_fzf() {
 function _init_history() {
     _init_fzf
 
+    [ -f ~/.atuin/bin/env ] && source ~/.atuin/bin/env
+
     if [ "$HISTORY_ATUIN" = "true" ] && [ -z "$(which atuin)" ]; then
         _warn_shell_helper "atuin not found: history is not being captured - run 'atuin_help' for install instructions"
         HISTORY_ATUIN=false
