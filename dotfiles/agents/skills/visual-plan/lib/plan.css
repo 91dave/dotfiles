@@ -86,7 +86,6 @@ h3 { margin: 2rem 0 0.6rem; font-size: 1.18rem; color: var(--heading); }
 h4 { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: var(--accent); }
 
 a { color: var(--accent); }
-p, li { max-width: 46rem; }
 hr { border: 0; border-top: 2px solid var(--line); margin: 2.5rem 0; }
 
 table { border-collapse: collapse; width: 100%; margin: 1.25rem 0; font-size: 0.94rem; }
