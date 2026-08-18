@@ -75,19 +75,34 @@ where its content comes from, and what happens after approval differ.
    node <skill-dir>/lib/serve.mjs <plan-file-or-dir>
    ```
 
-   Print the URL it returns and ask for approval or amendments. Run it in the
-   background so the session stays usable, and keep it running while the user
-   reads — stopping it kills the URL, though not the page already open in their
-   browser.
+   Print the URL it returns, say in a line or two what the plan covers, and ask
+   for approval or amendments. **Do not call `ExitPlanMode` on this turn**: the
+   dialog covers the terminal, and the URL is what the user needs first. Run the
+   server in the background so the session stays usable, and keep it running while
+   the user reads — stopping it kills the URL, though not the page already open in
+   their browser.
 
    It serves on `7842` and stops itself after 30 minutes with no requests, so
    one plan at a time needs no cleanup. If that port is taken it warns and uses
    a free one, which usually means an earlier plan is still being served.
 
-6. **Iterate, then close.** Amendments are edits to the same file. The server
-   renders per request, so the user reloads to see them; no rebuild, no restart.
-   Edit the block that changed, never regenerate the file. In plan mode, call
-   `ExitPlanMode` once the user is happy: the served plan is what they approved.
+6. **Iterate, and offer the gate every turn.** Amendments are edits to the same
+   file. The server renders per request, so the user reloads to see them; no
+   rebuild, no restart. Edit the block that changed, never regenerate the file.
+
+   In plan mode, from the user's first reply onward, **end every turn by calling
+   `ExitPlanMode`**: after making a requested change, after answering a question,
+   after any reply at all. Repeat the URL as the last line before the call so the
+   link survives the dialog. Declining is an ordinary "not yet" and costs the user
+   nothing, while approving is the only route to starting work, so keep the door
+   open on every turn rather than waiting for a signal you have to guess at. The
+   served plan is what they approve.
+
+   The exception is an explicit hold: the user says they are still reading, or asks
+   you to wait. Reply and stop, then resume the cadence on their next message.
+
+   Approval ends plan mode but does not stop the server. Leave it serving unless
+   the user is finished with the page.
 
 Outside plan mode, add `.plans/` to the repo's `.gitignore`. Plans are working
 artefacts. Azure DevOps is the record. In plan mode the harness file is the
