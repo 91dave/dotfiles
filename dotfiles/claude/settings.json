@@ -51,6 +51,17 @@
       {
         "hooks": [
           {
+            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/agents/hooks/askuserquestion-preview-guard.sh",
+            "statusMessage": "Blocking preview-style questions",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "AskUserQuestion"
+      },
+      {
+        "hooks": [
+          {
             "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/agents/hooks/rg-fd-guard.sh",
             "statusMessage": "Preferring rg/fdfind over grep/find",
             "timeout": 10,
