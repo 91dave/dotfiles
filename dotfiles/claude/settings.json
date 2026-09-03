@@ -14,28 +14,6 @@
     }
   },
   "hooks": {
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "atuin hook claude-code",
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "command": "atuin hook claude-code",
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      }
-    ],
     "PreToolUse": [
       {
         "hooks": [
@@ -65,15 +43,6 @@
             "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/agents/hooks/rg-fd-guard.sh",
             "statusMessage": "Preferring rg/fdfind over grep/find",
             "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "atuin hook claude-code",
             "type": "command"
           }
         ],
