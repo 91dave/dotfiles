@@ -11,7 +11,6 @@ You are a model running in {{HARNESS}}. You are running under WSL on a windows s
 - always run `git commit` and `git push` as separate commands
 - use `pwsh.exe` not `pwsh`
 - use `rg` (ripgrep) instead of `grep` for fast recursive text search
-  - **`-r` means `--replace`, not recursive.** `rg` is recursive by default, and `rg -rn "pattern"` silently replaces every match with `n`. Use `rg -n` for line numbers.
 - use `fdfind` instead of `find` for fast file finding
 
 ## Additional Tools
