@@ -142,6 +142,10 @@ build_for() {
     local excludes=("$@")
 
     mkdir -p "$(dirname "$out")"
+
+    local previous_lines=""
+    [ -f "$out" ] && previous_lines=$(wc -l < "$out")
+
     # Replace a pre-existing symlink (e.g. CLAUDE.md -> AGENTS.md) with a real file
     [ -L "$out" ] && rm -f "$out"
 
@@ -155,7 +159,15 @@ build_for() {
     # Substitute the harness placeholder and normalise line endings to LF
     sed -i "s/{{HARNESS}}/${harness}/g; s/\r//" "$out"
 
-    echo "Built $out ($(wc -l < "$out") lines)"
+    local lines
+    lines=$(wc -l < "$out")
+    if [ -z "$previous_lines" ]; then
+        echo "Built $out ($lines lines, new)"
+    elif [ "$lines" -ne "$previous_lines" ]; then
+        echo "Built $out ($lines lines, was $previous_lines)"
+    else
+        echo "Built $out ($lines lines)"
+    fi
 }
 
 # Symlink every work skill and every personal skill into an agent's skills folder.
