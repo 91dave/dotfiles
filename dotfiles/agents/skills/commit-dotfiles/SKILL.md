@@ -44,7 +44,7 @@ line for it, and tell the user to re-run `./install.sh` before it goes live. `li
 
 Run the agent sync when the diff touches:
 
-- `agents/template.md` or a file it includes (`output.md`, `minimal.md`), or
+- `agents/template.md` or any file it `@`-includes, or
 - a skill **added, removed or renamed** under `agents/skills/`.
 
 ```bash
