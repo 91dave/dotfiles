@@ -41,4 +41,13 @@ for rule in "${RULES[@]}"; do
     exit 2
   fi
 done
+
+LOOKS_LIKE_A_JEST_RUN='(^|[|&;(][[:space:]]*)(npx[[:space:]]+)?(nx[[:space:]]+(test|run-many|run[[:space:]]+[^[:space:];]+:test)|jest)([[:space:]]|;|$)'
+WORKER_COUNT_ALREADY_BOUNDED='--maxWorkers|--runInBand|--workerIdleMemoryLimit|[[:space:]]-w[[:space:]=]'
+
+if [[ "$NORMALISED" =~ $LOOKS_LIKE_A_JEST_RUN ]] && [[ ! "$NORMALISED" =~ $WORKER_COUNT_ALREADY_BOUNDED ]]; then
+  echo "REJECTED: An unbounded jest run spawns nproc-1 workers that grow to ~750MB each, exhausting the WSL VM. The OOM killer then fails init.scope, which SIGKILLs tmux and every interactive session. Append '--maxWorkers=6 --workerIdleMemoryLimit=1GB'." >&2
+  exit 2
+fi
+
 exit 0

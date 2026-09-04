@@ -41,7 +41,7 @@
         "hooks": [
           {
             "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/agents/hooks/command-guard.sh",
-            "statusMessage": "Preferring rg/fdfind over grep/find",
+            "statusMessage": "Enforce bash rules",
             "timeout": 10,
             "type": "command"
           }
