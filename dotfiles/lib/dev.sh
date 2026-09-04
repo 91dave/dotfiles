@@ -169,7 +169,3 @@ function ce() {
             ;;
     esac
 }
-
-# Check container engine on interactive shell startup
-[[ $- == *i* ]] && ce check
-
