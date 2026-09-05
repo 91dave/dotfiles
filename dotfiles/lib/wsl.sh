@@ -103,26 +103,36 @@ _set_term_title() {
 # `wsl.exe -d X -- sh -c`, so the probe travels base64-encoded.
 _wsltop_probe_source() {
 cat <<'PROBE'
-CG=/sys/fs/cgroup
 interval="${1:-1}"
-sum_field() {
-    pat="$1"; shift
-    [ -z "$1" ] && { echo 0; return; }
-    awk "\$1==\"$pat\"{s+=\$2} END{print s+0}" "$@" 2>/dev/null </dev/null
+TCK=$(getconf CLK_TCK 2>/dev/null || echo 100)
+
+snapshot() {
+    awk '
+        { split(FILENAME, f, "/"); pid = f[3]; base = f[4] }
+        base == "status" && /^RssAnon:/ { anon[pid] = $2 }
+        base == "cgroup" && /libpod-|podman-/ {
+            pod[pid] = 1
+            if ($0 ~ /libpod-/ && $0 !~ /libpod-conmon-/ &&
+                match($0, /libpod-[^\/]*\.scope/)) ids[substr($0, RSTART, RLENGTH)] = 1
+        }
+        base == "stat" {
+            line = $0; sub(/^[^)]*\) /, "", line); split(line, g, " ")
+            jif[pid] = g[12] + g[13]
+        }
+        END {
+            for (p in anon) { t += anon[p]; if (p in pod) pa += anon[p] }
+            for (p in jif)  { tj += jif[p];  if (p in pod) pj += jif[p] }
+            n = 0; for (i in ids) n++
+            print t+0, pa+0, tj+0, pj+0, n
+        }
+    ' /proc/[0-9]*/status /proc/[0-9]*/cgroup /proc/[0-9]*/stat 2>/dev/null </dev/null
 }
-pod_mem=""; pod_cpu=""; ctrs=0
-for d in $(find "$CG" -maxdepth 7 -type d \( -name 'libpod-*' -o -name 'podman-*' \) 2>/dev/null); do
-    [ -f "$d/memory.stat" ] && pod_mem="$pod_mem $d/memory.stat"
-    [ -f "$d/cpu.stat" ] && pod_cpu="$pod_cpu $d/cpu.stat"
-    case "$(basename "$d")" in
-        libpod-conmon-*|podman-pause-*) ;;
-        libpod-*) ctrs=$((ctrs+1)) ;;
-    esac
-done
-all_cpu0=$(sum_field usage_usec $CG/*/cpu.stat); pod_cpu0=$(sum_field usage_usec $pod_cpu)
+
+set -- $(snapshot); a0=$1 pa0=$2 tj0=$3 pj0=$4
 [ "$interval" != "0" ] && sleep "$interval"
-all_cpu1=$(sum_field usage_usec $CG/*/cpu.stat); pod_cpu1=$(sum_field usage_usec $pod_cpu)
-echo "anon=$(sum_field anon $CG/*/memory.stat) podanon=$(sum_field anon $pod_mem) cpu=$((all_cpu1-all_cpu0)) podcpu=$((pod_cpu1-pod_cpu0)) ctrs=$ctrs"
+set -- $(snapshot); a1=$1 pa1=$2 tj1=$3 pj1=$4 c1=$5
+
+echo "anon=$((a1*1024)) podanon=$((pa1*1024)) cpu=$(( (tj1-tj0)*1000000/TCK )) podcpu=$(( (pj1-pj0)*1000000/TCK )) ctrs=$c1"
 PROBE
 }
 
@@ -392,12 +402,7 @@ wsltop() {
     local attributed=0
     while IFS=$'\t' read -r name state; do
         if [ "$state" != "Running" ]; then
-            local extra=""
-            [ "$name" = "podman-machine-default" ] && \
-                extra=$(podman.exe machine list --format '{{.Running}}|{{.LastUp}}' 2>/dev/null | tr -d '\r' | awk -F'|' 'NR==1{print ", last up " $2}')
-            printf '  %-38s %9s %7s   \033[2m%s%s\033[0m\n' "$name" "-" "-" "$state" "$extra"
-            [ "$name" = "podman-machine-default" ] && \
-                printf '  %-38s %9s %7s   \033[2m%s\033[0m\n' "" "" "" "wsl provider, shares this VM's budget"
+            printf '  %-38s %9s %7s   \033[2m%s\033[0m\n' "$name" "-" "-" "$state"
             continue
         fi
         local anon=0 podanon=0 cpu=0 podcpu=0 ctrs=0
@@ -406,8 +411,8 @@ wsltop() {
         local pct_all pct_pod
         pct_all=$(awk -v c="$((cpu-podcpu))" -v i="$interval" -v n="$cpus" 'BEGIN{if(i>0) printf "%.1f%%", c*100/(i*1000000*n); else printf "-"}')
         pct_pod=$(awk -v c="$podcpu" -v i="$interval" -v n="$cpus" 'BEGIN{if(i>0) printf "%.1f%%", c*100/(i*1000000*n); else printf "-"}')
-        printf '  %-38s %9s %7s   \033[2m%s\033[0m\n' "$name  ex-podman" "$(_wsltop_human $((anon-podanon)))" "$pct_all" "$state"
-        printf '  %-38s %9s %7s   \033[2m%s containers\033[0m\n' "$name  podman" "$(_wsltop_human $podanon)" "$pct_pod" "$ctrs"
+        printf '  %-24s %-13s %9s %7s   \033[2m%s\033[0m\n' "$name" "ex-podman" "$(_wsltop_human $((anon-podanon)))" "$pct_all" "$state"
+        printf '  %-24s %-13s %9s %7s   \033[2m%s containers\033[0m\n' "" "podman" "$(_wsltop_human $podanon)" "$pct_pod" "$ctrs"
     done < "$work/distros"
     printf '\n  \033[2mattributed %s of %s anonymous; %s cache and kernel unattributed\033[0m\n\n' \
         "$(_wsltop_human $attributed)" "$(_wsltop_human $vm_anon)" "$(_wsltop_human $vm_cache)"

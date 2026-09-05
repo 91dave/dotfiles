@@ -60,6 +60,7 @@ Comprehensive documentation for all helper functions and aliases is available in
 - `wsl_help` - WSL integration helpers
 - `web <cmd>` - Web search and page fetching (search/fetch) for coding agents
 - `wslexe <cmd>` - WSL interop manager (get/check/fix)
+- `wsltop [-q|-s|-c]` - WSL resource overview: RAM/CPU by distro, container runtimes, host vs permitted
 
 **Configuration variables:**
 - `BASH_DEBUG` - Set to enable debug output during shell loading

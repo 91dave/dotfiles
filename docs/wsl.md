@@ -218,6 +218,40 @@ wslexe --help
 
 **Note:** The shell automatically runs `wslexe check` on startup to validate WSL interop.
 
+### wsltop
+
+Resource overview for the WSL virtual machine: RAM and CPU broken down by distribution, podman
+split out from the rest, container runtime state, and the running VM compared against what
+`.wslconfig` permits.
+
+```bash
+wsltop            # full report
+wsltop -s         # two lines: runtimes plus RAM and CPU
+wsltop -c         # one line, used on interactive shell startup
+wsltop -q         # this distro only, skips the Windows and interop calls
+```
+
+```
+📦 Ubuntu-24.04 🟢 1 running    📦 podman-machine-default 🔴 stopped
+📊 1.6 GB / 21.5 GB (10%)  █░░░░░░░░░  ·  load 1.49 over 12 vCPU
+```
+
+Runtime markers are 🟢 for containers running, 🟡 for a runtime present but idle, and 🔴 for a
+stopped distribution.
+
+**Why it works the way it does.** All WSL2 distributions share one utility virtual machine, so
+`/proc/meminfo` is identical in every distribution and cgroups are shared across all of them.
+Per-distribution memory therefore has to be attributed from `/proc`, whose PID namespaces are
+genuinely isolated, and gathered by fanning out over `wsl.exe -d <distro>`. Container counts
+come from that same scan rather than `podman ps`, which costs around 0.75 seconds because it
+initialises the container store.
+
+The distribution list is cached for 60 seconds in `$XDG_RUNTIME_DIR/wsltop-distros.cache`, so
+`-s` and `-c` cost around 25 milliseconds. Override with `WSLTOP_CACHE_SECONDS`.
+
+When the running VM does not match `.wslconfig`, the full report warns that a `wsl --shutdown`
+is needed for the settings to take effect.
+
 ## Integration Examples
 
 ### Building Cross-Platform Scripts
