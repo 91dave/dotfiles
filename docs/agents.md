@@ -16,9 +16,11 @@ dotfiles/agents/
   sync-agents.sh    # builds both instruction files + links skills into both agents
   template.md       # the shared system-prompt source (with a {{HARNESS}} placeholder)
   skills/           # personal skills, symlinked into both agents
-    ci-pipeline/  commit-dotfiles/  docker-security/  resume-pi-work/
-    ship-it/  skill-crafting/  wip/  workflow/
+  hooks/            # PreToolUse guards, wired up in dotfiles/claude/settings.json
 ```
+
+One directory per skill in [`dotfiles/agents/skills/`](../dotfiles/agents/skills). A skill is
+discovered by being there, so the directory listing is the list.
 
 ## What `sync-agents.sh` does
 
@@ -69,6 +71,28 @@ updated on a fresh install:
 - **`CLAUDE_ORG_REPO`** — the local path of your `docs-claude-helpers` clone
   (e.g. `/mnt/c/Code/_docs/docs-claude-helpers`). Provides `CLAUDE-template.md` and the
   work skills.
+
+## Hooks
+
+`hooks/` holds `PreToolUse` guards that stop an agent making the same mistakes repeatedly.
+They are wired up per tool in `dotfiles/claude/settings.json`, and a guard rejects a call by
+writing a message to stderr and exiting 2, which the agent sees in place of the tool result.
+They are Claude Code hooks; pi does not run them. `settings.json` wires up one more guard
+from `docs-claude-helpers`, which belongs to that repo rather than this one.
+
+| Hook | Tool | Guards against |
+|------|------|----------------|
+| `command-guard.sh` | `Bash` | `grep`, `find`, `docker`, `dotnet` and `pwsh` where a WSL-specific replacement is wanted, `rg -rn` (`-r` means `--replace`), `git commit` and `git push` chained in one command, and unbounded `jest` runs that exhaust the VM |
+| `askuserquestion-preview-guard.sh` | `AskUserQuestion` | `preview` on an option, which swaps the free-text row for a notes field and stops the user answering in their own words |
+
+`command-guard.sh` reads its patterns from the `RULES` array: a regex and the rejection
+message, separated by a unit separator. Heredoc bodies are stripped before matching, so file
+content that happens to contain `grep` does not trip a rule. Add a rule by appending to the
+array. The message is the whole of the agent's feedback, so it needs to say what to run
+instead, not just what was refused.
+
+The rejection messages and `template.md` say the same things, deliberately: the template tells
+an agent the convention up front, the hook catches it when the instruction is missed.
 
 ## Install
 
