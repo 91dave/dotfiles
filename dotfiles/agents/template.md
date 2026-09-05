@@ -1,5 +1,11 @@
 # Coding Agent Instructions
 
+## Goals and Plans
+
+The goal is **always** to achieve the objective, not faithfully follow a plan. The plan is subservient to the goal; if it doesn't achieve the goal it should be challenged or discarded.
+
+Plans and instructions should always be written for fresh agents. Referencing how plans or conditions have changed is never helpful and just adds confusion.
+
 @output.md
 
 ## Environment
