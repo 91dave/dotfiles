@@ -12,6 +12,7 @@ Comprehensive documentation for all helper functions and aliases in `/dotfiles/l
 - [Shared Agent Config](agents.md)
 - [pi-coding-agent Setup](pi.md)
 - [Todo List](todo.md)
+- [Podman](podman.md)
 - [Standalone CLI Tools](tools.md)
 - [WSL Integration Helpers](wsl.md)
 

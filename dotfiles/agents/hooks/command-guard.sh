@@ -28,7 +28,7 @@ where_a_command_can_start() { printf '(^|[|&;(][[:space:]]*)%s([[:space:]]|;|$)'
 RULES=(
   "$(where_a_command_can_start '(e|f|z)?grep')${US}REJECTED: Use 'rg' (ripgrep), not grep - it is recursive by default and faster. As a pipe filter, 'rg <pattern>' replaces piping into grep. rg flags differ: -n for line numbers (NOT -r, which means --replace), -g '<glob>' to filter files (no --include), and no -R."
   "$(where_a_command_can_start 'find')${US}REJECTED: Use 'fdfind' instead of find to locate files - e.g. 'fdfind <pattern>' or 'fdfind -e cs' by extension. If you genuinely need a find-only feature (-exec, -newer, -mtime), say why and run it by hand."
-  "$(where_a_command_can_start 'docker(-compose)?')${US}REJECTED: Use 'podman.exe' for all container operations. Compose is a subcommand: 'podman.exe compose ...' replaces both 'docker compose' and the 'docker-compose' binary."
+  "$(where_a_command_can_start 'docker(-compose)?')${US}REJECTED: Use 'podman' for all container operations - it now runs natively in WSL. Compose is a subcommand: 'podman compose ...' replaces both 'docker compose' and the 'docker-compose' binary."
   "$(where_a_command_can_start 'dotnet')${US}REJECTED: Use 'dotnet.exe', not 'dotnet' - the Windows SDK builds these solutions."
   "$(where_a_command_can_start 'pwsh')${US}REJECTED: Use 'pwsh.exe', not 'pwsh'. Note that .exe commands cannot resolve WSL paths: pass Windows-style paths (C:/Code/...) and \$USERPROFILE_WIN rather than \$USERPROFILE."
   "[[:space:]](-rn|-nr)([[:space:]]|;|\$)${US}REJECTED: In rg, '-r' means --replace, not recursive - 'rg -rn <pattern>' silently replaces every match with 'n' and prints garbage. rg is recursive by default; use 'rg -n' for line numbers."

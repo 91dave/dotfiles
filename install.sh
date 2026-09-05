@@ -73,6 +73,11 @@ link claude/settings.json "$HOME/.claude/settings.json"
 echo "Building agent instruction files + skills..."
 bash "$DF/agents/sync-agents.sh"
 
+echo "systemd user units..."
+link systemd/podman-tcp.socket  "$HOME/.config/systemd/user/podman-tcp.socket"
+link systemd/podman-tcp.service "$HOME/.config/systemd/user/podman-tcp.service"
+link systemd/podman-tcp.socket  "$HOME/.config/systemd/user/sockets.target.wants/podman-tcp.socket"
+
 echo "bin scripts..."
 link bin/repos           "$HOME/.local/bin/repos"
 link bin/web             "$HOME/.local/bin/web"

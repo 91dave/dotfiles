@@ -35,8 +35,8 @@ ce <command>
 ```
 
 **Commands:**
-- `check [-v]` - Check if container engine is running (-v for verbose output)
-- `fix` - Start the container engine
+- `check [-v]` - Check if container engine is reachable (-v for verbose output)
+- `fix` - Start the podman socket in WSL
 - `help` - Show help message
 
 **Examples:**
@@ -47,12 +47,15 @@ ce check
 # Check with verbose output
 ce check -v
 
-# Start the container engine if it's not running
+# Start the engine if it's not reachable
 ce fix
 ```
 
-**Auto-check on startup:**
-The container engine status is automatically checked when you start an interactive shell. If it's not running, you'll see a warning with instructions to fix it.
+`fix` starts `podman-tcp.socket` in the WSL distro. It does not start a podman machine. See
+[Podman](podman.md) for how the engine is wired up.
+
+`wsltop --short` runs on interactive shell startup and shows container runtime state, so there
+is no separate engine auto-check.
 
 ### pod
 

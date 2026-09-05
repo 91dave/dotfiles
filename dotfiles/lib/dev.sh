@@ -16,9 +16,9 @@ function dev_help() {
     echo "  ccs → vim ~/.claude/settings.json"
 }
 
-alias docker="podman.exe"
-alias docker-compose="podman.exe compose"
-alias podman="podman.exe"
+alias docker="podman"
+alias docker-compose="podman compose"
+#alias podman="podman.exe"
 alias dotnet="dotnet.exe"
 alias ccs="vim ~/.claude/settings.json"
 alias cs="claude-sessions"
@@ -149,8 +149,8 @@ function ce() {
             ;;
         fix)
             echo "🔧 Starting container engine..."
-            # Run from Windows path to avoid UNC path translation errors
-            if (cd /mnt/c && podman.exe machine start); then
+            if systemctl --user start podman-tcp.socket >/dev/null 2>&1 \
+                && podman.exe ps >/dev/null 2>&1; then
                 echo "✅ Container engine started"
             else
                 echo "❌ Failed to start container engine"

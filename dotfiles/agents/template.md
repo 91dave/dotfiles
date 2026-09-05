@@ -6,7 +6,7 @@
 
 You are a model running in {{HARNESS}}. You are running under WSL on a windows system. Use linux commands as usual with the following exceptions:
 
-- use `podman.exe` instead of `docker` for all container operations
+- use `podman` instead of `docker` for all container operations
 - use `dotnet.exe` not `dotnet`
 - always run `git commit` and `git push` as separate commands
 - use `pwsh.exe` not `pwsh`
