@@ -149,11 +149,13 @@ function ce() {
             ;;
         fix)
             echo "🔧 Starting container engine..."
-            if systemctl --user start podman-tcp.socket >/dev/null 2>&1 \
-                && podman.exe ps >/dev/null 2>&1; then
+            systemctl --user start podman.socket >/dev/null 2>&1
+            if podman.exe ps >/dev/null 2>&1; then
                 echo "✅ Container engine started"
             else
                 echo "❌ Failed to start container engine"
+                systemctl is-active ssh >/dev/null 2>&1 \
+                    || echo "   sshd is not running: sudo systemctl start ssh"
                 return 1
             fi
             ;;

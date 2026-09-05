@@ -1,41 +1,68 @@
 # Podman
 
 Podman runs natively inside the `Ubuntu-24.04` WSL distribution. The Windows `podman.exe`
-client talks to it over a loopback TCP socket, so the Linux and Windows CLIs drive one
-container environment rather than two.
+client and Podman Desktop both reach it over SSH, so the Linux CLI, the Windows CLI and the
+desktop app drive one container environment rather than three.
 
 ## How it is wired
 
 ```
-Windows                          WSL (Ubuntu-24.04)
--------                          ------------------
-podman.exe  ──tcp://127.0.0.1:8899──▶  podman-tcp.socket
-                                         │ socket activation
-                                         ▼
-                                       podman system service
-                                         │
-                                       podman 4.9.3
+Windows                             WSL (Ubuntu-24.04)
+-------                             ------------------
+podman.exe     ─┐                   sshd (127.0.0.1:22)
+Podman Desktop ─┴─ssh://dave@127.0.0.1:22─▶ │
+                                            ▼
+                                          podman.socket
+                                            │ socket activation
+                                            ▼
+                                          podman system service
+                                            │
+                                          podman 4.9.3
 ```
 
 | Piece | Where |
 |---|---|
-| Socket unit | `dotfiles/systemd/podman-tcp.socket`, listening on `127.0.0.1:8899` |
-| Service unit | `dotfiles/systemd/podman-tcp.service`, socket-activated |
-| Windows connection | `wsl-ubuntu`, `tcp://127.0.0.1:8899`, set as default |
+| API socket | `podman.socket`, shipped by the distro, listening on `/run/user/1002/podman/podman.sock` |
+| SSH server | `openssh-server`, configured by `dotfiles/ssh/sshd-podman.conf` |
+| Key | `~/.ssh/podman_ed25519`, public half in `~/.ssh/authorized_keys` |
+| Windows copy of the key | `C:\Users\DaveA\.ssh\podman_ed25519` |
+| Windows connection | `wsl-ubuntu`, `ssh://dave@127.0.0.1:22/run/user/1002/podman/podman.sock`, set as default |
 | Connection store | `%APPDATA%\containers\podman-connections.json` |
+| Podman Desktop | preference `podman.system.connections.remote` set to `true` |
 
-WSL2 forwards loopback from Windows into the distro, so no port mapping is needed.
+WSL2 forwards loopback from Windows into the distro, so no port mapping is needed. `sshd`
+binds `127.0.0.1` only, so nothing on the LAN can reach it.
 
-`install.sh` links both units into `~/.config/systemd/user/`, plus a third symlink into
-`sockets.target.wants/` which is what enables the socket at login.
+## Setup on a new machine
+
+`install.sh` does not cover this: the SSH server needs root, and the key is machine-specific.
+
+```bash
+sudo apt-get update && sudo apt-get install -y openssh-server
+sudo cp dotfiles/ssh/sshd-podman.conf /etc/ssh/sshd_config.d/10-podman-wsl.conf
+sudo systemctl enable --now ssh
+
+ssh-keygen -t ed25519 -N '' -f ~/.ssh/podman_ed25519 -C "podman-wsl-$(hostname)"
+cat ~/.ssh/podman_ed25519.pub >> ~/.ssh/authorized_keys
+cp ~/.ssh/podman_ed25519 "$USERPROFILE_WIN/.ssh/podman_ed25519"
+
+podman.exe system connection add --identity 'C:/Users/DaveA/.ssh/podman_ed25519' \
+    wsl-ubuntu 'ssh://dave@127.0.0.1:22/run/user/1002/podman/podman.sock'
+podman.exe system connection default wsl-ubuntu
+```
+
+Then in Podman Desktop, Settings, Preferences, Extension: Podman, tick **Load remote system
+connections (ssh)** and restart it. The same preference can be set directly in
+`C:\Users\DaveA\.local\share\containers\podman-desktop\configuration\settings.json` while the
+app is closed.
 
 ## Everyday use
 
-Both clients hit the same store, so either works:
+All three clients hit the same store:
 
 ```bash
 podman ps          # native Linux client, no network hop
-podman.exe ps      # Windows client, over the TCP socket
+podman.exe ps      # Windows client, over SSH
 ```
 
 The Windows client translates Windows paths for bind mounts, so both of these work:
@@ -45,80 +72,45 @@ podman.exe run --rm -v 'C:\Code\_personal\dotfiles:/m:ro' <image> ls /m
 podman.exe run --rm -v '/mnt/c/Code/_personal/dotfiles:/m:ro' <image> ls /m
 ```
 
-`ce check` reports whether the engine is reachable and `ce fix` starts the socket. `wsltop`
-shows container counts and podman's memory and CPU share per distro.
+`ce check` reports whether the engine is reachable and `ce fix` starts `podman.socket`.
+`wsltop` shows container counts and podman's memory and CPU share per distro.
 
 ## Gotchas
 
-**Never run `systemctl --user disable podman-tcp.socket`.** The unit files are symlinks into
-this repo, and systemd treats a symlinked unit in the config directory as an enablement
-symlink, so `disable` deletes it. Run `./install.sh` to put it back. Enablement is handled by
-the `sockets.target.wants` symlink that `install.sh` creates, which is why `ce fix` only ever
-starts the socket and never enables it.
+**The key must be ed25519 and the identity path absolute.** Podman Desktop rejects RSA, and a
+`~` prefix in the identity path does not resolve on Windows.
+
+**Two copies of the private key exist.** The WSL copy at `~/.ssh/podman_ed25519` is the
+canonical one, the copy in the Windows profile is what `podman.exe` and Podman Desktop read.
+Regenerating the key means replacing both and updating `authorized_keys`.
+
+**sshd needs root, so a fresh distro is not fully set up by `install.sh`.** Follow the setup
+section above. If `ce fix` fails, check `systemctl is-active ssh` first.
 
 **Linger.** Without `sudo loginctl enable-linger $USER` the user systemd manager can stop when
-no shell is open in the distro, taking the socket with it. Everything works while a shell is
-open either way.
-
-**The socket is unauthenticated.** Podman's own help describes `tcp://` as "not secured". Any
-process on the Windows host that can reach `127.0.0.1:8899` has full control of podman, which
-is root inside containers. This is an accepted trade-off for a single-user development
-machine, not a pattern to copy onto a shared host.
+no shell is open in the distro, taking `podman.socket` with it. Everything works while a shell
+is open either way.
 
 **Version skew.** The Windows client is 5.2.2 against a 4.9.3 server, because Ubuntu 24.04
 ships 4.9.3. Everyday commands work, but this is not a combination upstream tests, and newer
 client endpoints can fail against the older server.
 
-## Known limitation: Podman Desktop
+## History: the TCP socket
 
-Podman Desktop cannot use this setup. It does not read podman's connection list. It connects
-to a Windows named pipe, which only `podman machine start` creates:
-
-```
-win-sshproxy.exe podman-machine-default <config-dir>
-  npipe:////./pipe/podman-machine-default  ssh://root@localhost:59740/run/podman/podman.sock  <identity>
-  npipe:////./pipe/docker_engine           ssh://root@localhost:59740/run/podman/podman.sock  <identity>
-```
-
-That proxy bridges a named pipe to an `ssh://` endpoint and nothing else. Podman Desktop's
-[remote access documentation](https://podman-desktop.io/docs/podman/podman-remote) confirms
-only `ssh://` connections are supported, `tcp://` is not, and keys must be ed25519 rather than
-RSA.
-
-So with the podman machine stopped, Podman Desktop reports "No Container Engine". This is by
-design, not a misconfiguration, and no setting will surface a `tcp://` connection to it.
-
-## Future work: move to SSH
-
-Switching the transport from TCP to SSH would serve the CLI and Podman Desktop from one
-connection, and would remove the unauthenticated socket described above. Outline:
-
-1. Install `openssh-server` in the distro. This is a new dependency.
-2. Generate an ed25519 key. RSA is rejected by Podman Desktop.
-3. Add the public key to `~/.ssh/authorized_keys`.
-4. Keep the already-active user socket, `systemctl --user status podman.socket`.
-5. Replace the connection:
-
-   ```bash
-   podman.exe system connection add --identity <abs-path-to-key> wsl-ubuntu \
-       ssh://dave@127.0.0.1:22/run/user/1002/podman/podman.sock
-   ```
-
-   Podman Desktop needs an absolute identity path on Windows. A `~` prefix will not resolve.
-6. Enable the Podman Desktop setting that surfaces CLI connections, then confirm it lists the
-   containers.
-
-Verify the setting exists before dismantling anything. Podman Desktop 1.12.0 dates from July
-2024 and may predate it, in which case this also means upgrading Podman Desktop.
+Before SSH, `podman.exe` reached the distro over an unauthenticated `tcp://127.0.0.1:8899`
+socket, served by `podman-tcp.socket` and `podman-tcp.service` in this repo. Podman Desktop
+could not use it, since it only supports `ssh://` connections, and any process on the Windows
+host could drive podman through it. SSH replaced both problems at once, so those units are
+gone.
 
 ## The old machine
 
 `podman-machine-default` is still registered and holds a **126.2 GB non-sparse** `ext4.vhdx`,
-despite being unused since June. Removing it reclaims that space:
+despite being unused since June. Nothing depends on it now that Podman Desktop uses the SSH
+connection. Removing it reclaims that space:
 
 ```bash
 podman.exe machine rm podman-machine-default
 ```
 
-This also deletes the two `podman-machine-default*` connections, which are no longer the
-default so nothing depends on them. Keep it only if Podman Desktop is worth the disk.
+This also deletes the two `podman-machine-default*` connections.
