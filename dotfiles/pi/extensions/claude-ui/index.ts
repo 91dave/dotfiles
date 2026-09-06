@@ -51,6 +51,58 @@ function envDisabled(): boolean {
   return v === "0" || v === "false" || v === "off" || v === "no";
 }
 
+function copilotIntervalMs(): number {
+  const secs = Number(process.env.PI_CLAUDE_COPILOT_INTERVAL);
+  return (Number.isFinite(secs) && secs > 0 ? secs : 60) * 1000;
+}
+
+function makeCopilotTracker(onUpdate: () => void) {
+  let snapshot: {
+    entitlement: number;
+    credits_used: number;
+    remaining: number;
+    percent_remaining: number;
+  } | null = null;
+  let stopped = false;
+
+  const refresh = () => {
+    execFile(
+      "gh",
+      [
+        "api",
+        "/copilot_internal/user",
+        "--jq",
+        ".quota_snapshots.premium_interactions | {entitlement, credits_used, remaining, percent_remaining}",
+      ],
+      { timeout: 10000 },
+      (err, stdout) => {
+        if (stopped || err) return;
+        try {
+          const parsed = JSON.parse(stdout);
+          if (parsed && typeof parsed === "object") {
+            snapshot = parsed;
+            onUpdate();
+          }
+        } catch {
+          return;
+        }
+      },
+    );
+  };
+
+  refresh();
+  const timer = setInterval(refresh, copilotIntervalMs());
+
+  return {
+    get: () => snapshot,
+    refresh,
+    dispose: () => {
+      stopped = true;
+      clearInterval(timer);
+    },
+  };
+}
+
 /** "1M context" / "200K context" / "128K context" */
 function windowLabel(window: number | undefined): string {
   if (!window || window <= 0) return "";
@@ -104,6 +156,7 @@ export default function (pi: ExtensionAPI) {
   // biome-ignore lint/suspicious/noExplicitAny: TUI handle captured from footer factory
   let tuiRef: any;
   let diffRef: ReturnType<typeof makeDiffTracker> | undefined;
+  let copilotRef: ReturnType<typeof makeCopilotTracker> | undefined;
   let clock: ReturnType<typeof setInterval> | undefined;
   let sessionStart = 0;
 
@@ -115,6 +168,7 @@ export default function (pi: ExtensionAPI) {
     const cwd = process.cwd();
     sessionStart = Date.now();
     diffRef = makeDiffTracker(cwd);
+    copilotRef = makeCopilotTracker(() => tuiRef?.requestRender());
 
     // ---- Above-editor "effort" indicator: ● <level> · /effort (right-aligned) ----
     // biome-ignore lint/suspicious/noExplicitAny: theme type from pi-tui
@@ -142,6 +196,8 @@ export default function (pi: ExtensionAPI) {
           unsubBranch();
           if (clock) clearInterval(clock);
           clock = undefined;
+          copilotRef?.dispose();
+          copilotRef = undefined;
         },
         invalidate() {},
         render(width: number): string[] {
@@ -203,6 +259,18 @@ export default function (pi: ExtensionAPI) {
           if (branch) {
             line2.push(theme.fg("success", `🌿 ${branch}`));
           }
+          const copilot = copilotRef?.get();
+          if (copilot) {
+            const pctRem = Number(copilot.percent_remaining.toFixed(1));
+            const lowCredit = pctRem <= 10;
+            line2.push(
+              theme.fg(lowCredit ? "error" : "accent", "🤖 ") +
+                theme.fg(
+                  "muted",
+                  `${copilot.remaining}/${copilot.entitlement} credits (${pctRem}%)`,
+                ),
+            );
+          }
           if (line2.length > 0) {
             lines.push(truncateToWidth(pad + line2.join("  "), width));
           }
@@ -228,6 +296,8 @@ export default function (pi: ExtensionAPI) {
     ctx.ui.setFooter(undefined);
     ctx.ui.setWorkingIndicator();
     diffRef = undefined;
+    copilotRef?.dispose();
+    copilotRef = undefined;
     tuiRef = undefined;
   };
 
