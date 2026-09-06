@@ -56,6 +56,7 @@ web fetch "https://example.com"
 ```
 
 @repos.md
+
 @pkg.md
 
 ## Capturing Output From Long-Running Commands
@@ -92,5 +93,3 @@ pwsh.exe -File "$USERPROFILE_WIN/.claude/skills/helper.ps1"  # ✓
 ```
 
 @CLAUDE-template.md --exclude "## Technology Choices" --exclude "## Architecture" --exclude "### Planning and Execution" --exclude "## Testing Strategy"
-
-@visual-plan.md
