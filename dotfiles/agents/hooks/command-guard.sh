@@ -50,4 +50,24 @@ if [[ "$NORMALISED" =~ $LOOKS_LIKE_A_JEST_RUN ]] && [[ ! "$NORMALISED" =~ $WORKE
   exit 2
 fi
 
+DISPOSABLE_WRITE_TARGET='(/dev/null|/dev/std(out|err)|/tmp/[^[:space:];|&]*)'
+
+WRITES_LEFT_AFTER_DISCOUNTING_DISPOSABLE_TARGETS=$(printf '%s' "$NORMALISED" \
+  | sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g" \
+  | sed -E 's/[0-9]*>&[0-9-]+//g' \
+  | sed -E "s#(&|[0-9])?>>?[[:space:]]*${DISPOSABLE_WRITE_TARGET}##g" \
+  | sed -E "s#([|&;(][[:space:]]*|^)tee([[:space:]]+-a)?[[:space:]]+${DISPOSABLE_WRITE_TARGET}#\1#g")
+
+SHELL_WRITES_A_FILE='(^|[^=<>!-])>>?[[:space:]]*[^[:space:];|&>]|([|&;(][[:space:]]*|^)tee([[:space:]]|$)'
+EDITS_A_FILE_IN_PLACE='([|&;(][[:space:]]*|^)(sed|perl|awk)[[:space:]][^;|]*-([a-zA-Z]*i([[:space:]]|$|\.)|-in-place)'
+RUNS_AN_INLINE_SCRIPT='([|&;(][[:space:]]*|^)(python3?|node|ruby|perl)([[:space:]]|$)'
+INLINE_SCRIPT_WRITES_A_FILE="(open\\([^)]*['\"](w|a)|writeFileSync|write_text\\(|writelines\\()"
+
+if [[ "$WRITES_LEFT_AFTER_DISCOUNTING_DISPOSABLE_TARGETS" =~ $SHELL_WRITES_A_FILE ]] \
+  || [[ "$NORMALISED" =~ $EDITS_A_FILE_IN_PLACE ]] \
+  || { [[ "$NORMALISED" =~ $RUNS_AN_INLINE_SCRIPT ]] && [[ "$COMMAND" =~ $INLINE_SCRIPT_WRITES_A_FILE ]]; }; then
+  echo "REJECTED: Change files with the Write, Edit or MultiEdit tools, not shell redirection, 'sed -i' or an inline script - those route around the PreToolUse hooks that inspect what is being written. Writing to /tmp and /dev/null is still fine." >&2
+  exit 2
+fi
+
 exit 0
