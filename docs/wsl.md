@@ -225,10 +225,10 @@ split out from the rest, container runtime state, and the running VM compared ag
 `.wslconfig` permits.
 
 ```bash
-wsltop            # full report
-wsltop -s         # two lines: runtimes plus RAM and CPU
+wsltop            # two lines: runtimes plus RAM and CPU
+wsltop -f         # full report
 wsltop -c         # one line, used on interactive shell startup
-wsltop -q         # this distro only, skips the Windows and interop calls
+wsltop -q         # full report for this distro only, skips the Windows and interop calls
 ```
 
 ```
@@ -247,7 +247,7 @@ come from that same scan rather than `podman ps`, which costs around 0.75 second
 initialises the container store.
 
 The distribution list is cached for 60 seconds in `$XDG_RUNTIME_DIR/wsltop-distros.cache`, so
-`-s` and `-c` cost around 25 milliseconds. Override with `WSLTOP_CACHE_SECONDS`.
+the default output and `-c` cost around 25 milliseconds. Override with `WSLTOP_CACHE_SECONDS`.
 
 When the running VM does not match `.wslconfig`, the full report warns that a `wsl --shutdown`
 is needed for the settings to take effect.

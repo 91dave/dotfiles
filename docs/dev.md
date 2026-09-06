@@ -54,7 +54,7 @@ ce fix
 `fix` starts `podman.socket` in the WSL distro. It does not start a podman machine. See
 [Podman](podman.md) for how the engine is wired up.
 
-`wsltop --short` runs on interactive shell startup and shows container runtime state, so there
+`wsltop` runs on interactive shell startup and shows container runtime state, so there
 is no separate engine auto-check.
 
 ### pod

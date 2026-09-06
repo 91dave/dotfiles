@@ -18,8 +18,9 @@ function wsl_help() {
     echo ""
     echo "  wslexe <cmd>    Manage WSL interop (get, check, fix, help)"
     echo "  wecho <args>    Echo with windows variable substitution e.g. %USERPROFILE%"
-    echo "  wsltop [-q]     RAM/CPU by distro, podman split, host vs permitted"
-    echo "  wsltop -s       Two-line summary (runtimes, RAM, CPU)"
+    echo "  wsltop          Two-line summary (runtimes, RAM, CPU)"
+    echo "  wsltop -f       RAM/CPU by distro, podman split, host vs permitted"
+    echo "  wsltop -q       As -f, this distro only; skips Windows and interop"
     echo "  wsltop -c       One-line summary, for shell startup"
 }
 
@@ -289,18 +290,20 @@ _wsltop_brief() {
 }
 
 wsltop() {
-    local mode=full quick=0 interval=1
+    local mode=short quick=0 interval=1
     case "${1:-}" in
-        -q|--quick)  mode=quick; quick=1; interval=0 ;;
+        -f|--full)    mode=full ;;
+        -q|--quick)   mode=quick; quick=1; interval=0 ;;
         -s|--short)   mode=short ;;
         -c|--compact) mode=compact ;;
         -h|--help|help)
             echo "📊 wsltop - WSL resource overview"
             echo ""
-            echo "Usage: wsltop [-q | -s | -c]"
+            echo "Usage: wsltop [-f | -q | -c]"
             echo ""
-            echo "  -q, --quick   This distro only; skips the Windows and interop calls"
-            echo "  -s, --short   Two lines: runtimes plus RAM and CPU (cached, startup-safe)"
+            echo "  (no flag)     Two lines: runtimes plus RAM and CPU (cached, startup-safe)"
+            echo "  -f, --full    Full report: host, .wslconfig drift, RAM and CPU by distro"
+            echo "  -q, --quick   As --full but this distro only; skips Windows and interop"
             echo "  -c, --compact One line, for prompts and shell startup"
             return 0
             ;;
@@ -422,4 +425,4 @@ wsltop() {
     echo
 }
 
-[[ $- == *i* ]] && wsltop --short
+[[ $- == *i* ]] && wsltop
