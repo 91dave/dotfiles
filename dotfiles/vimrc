@@ -1,4 +1,5 @@
 syntax on
+filetype plugin indent on
 map t :tabedit 
 set autoindent
 set autoread
