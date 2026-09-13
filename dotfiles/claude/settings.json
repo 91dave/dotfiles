@@ -14,7 +14,60 @@
     }
   },
   "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook permission",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "permission_prompt"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook waiting",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "agent_needs_input|elicitation_dialog|elicitation_url_dialog"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook working",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook question",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "AskUserQuestion"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook plan",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "ExitPlanMode"
+      },
       {
         "hooks": [
           {
@@ -56,6 +109,44 @@
             "command": "{ echo \"[$(date)] Claude Code Session Startup\"; cd /mnt/c/Code/_docs/docs-claude-helpers && git.exe pull --rebase --ff-only && /mnt/c/Code/_personal/dotfiles/dotfiles/agents/sync-agents.sh ; } > /tmp/claude-session-start.log 2>&1 || true",
             "statusMessage": "Syncing docs-claude-helpers and rebuilding agents",
             "timeout": 120,
+            "type": "command"
+          },
+          {
+            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook idle",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state end",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook done",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook working",
+            "timeout": 5,
             "type": "command"
           }
         ]
