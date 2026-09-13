@@ -53,6 +53,15 @@ is_live() {  # is_live <id> <newline-delimited-live-set>
     [[ $'\n'$2$'\n' == *$'\n'$1$'\n'* ]]
 }
 
+has_turns() {  # has_turns <transcript-path>  -- an agent reply, or a prompt of your own
+    rg -q '"type":"assistant"' "$1" 2>/dev/null && return 0
+    jq -r 'select(.type=="user" and ((.isMeta // false) == false))
+           | (if (.message.content | type) == "string" then .message.content
+              else ([.message.content[]? | select(.type=="text") | .text] | first // "") end)
+           | select((startswith("<command-name>") or startswith("<local-command-stdout>")) | not)
+           | @json' "$1" 2>/dev/null | rg -q .
+}
+
 end_session() {  # end_session <id>  -- remove live marker(s) whose sessionId matches
     need jq
     local id="$1" f
@@ -95,9 +104,8 @@ clean_fallback() {
         | awk 'NF && $0 !~ /^[[:space:]]*Caveat:/ { print; exit }'
 }
 
-# Compute the cacheable fields for one transcript: cwd, branch, project, title.
 compute_fields() {
-    local path="$1" first cwd branch prompt title proj
+    local path="$1" first cwd branch prompt title proj turns
     first="$(rg -m1 '"type":"user"' "$path" 2>/dev/null)"
     [[ -n "$first" ]] || return 1
     IFS=$'\t' read -r cwd branch prompt < <(printf '%s' "$first" | first_user_fields)
@@ -106,7 +114,8 @@ compute_fields() {
     [[ -n "$title" ]] || title="(untitled)"
     title="${title//$'\t'/ }"
     proj="${cwd##*/}"
-    printf '%s\t%s\t%s\t%s' "$cwd" "$branch" "$proj" "$title"
+    if has_turns "$path"; then turns=1; else turns=0; fi
+    printf '%s\t%s\t%s\t%s\t%s' "$cwd" "$branch" "$proj" "$title" "$turns"
 }
 
 # A per-transcript cache keyed on file mtime keeps repeat runs fast: only new or
@@ -121,10 +130,11 @@ build_list() {
     local live; live="$(live_ids)"
     declare -A CM CR BL
     if [[ -f "$cache" ]]; then
-        local cm cid rest
-        while IFS=$'\t' read -r cm cid rest; do
-            [[ -n "$cid" ]] || continue
-            CM["$cid"]="$cm"; CR["$cid"]="$rest"
+        local cm cid ccwd cbranch cproj ctitle cturns
+        while IFS=$'\t' read -r cm cid ccwd cbranch cproj ctitle cturns; do
+            [[ -n "$cid" && -n "$cturns" ]] || continue
+            CM["$cid"]="$cm"
+            CR["$cid"]="$ccwd"$'\t'"$cbranch"$'\t'"$cproj"$'\t'"$ctitle"$'\t'"$cturns"
         done < "$cache"
     fi
     if [[ -f "$BLOCKLIST" ]]; then
@@ -135,7 +145,7 @@ build_list() {
     fi
 
     local tmp; tmp="$(mktemp)"
-    local mtime path id fields cwd branch proj title date live_mark display
+    local mtime path id fields cwd branch proj title turns date live_mark display
     stat -c '%Y %n' "$PROJECTS_DIR"/*/*.jsonl 2>/dev/null | sort -rn | \
     while read -r mtime path; do
         [[ -s "$path" ]] || continue
@@ -148,7 +158,8 @@ build_list() {
         [[ -n "$fields" ]] || continue
         printf '%s\t%s\t%s\n' "$mtime" "$id" "$fields" >> "$tmp"
         [[ -n "${BL[$id]:-}" ]] && continue
-        IFS=$'\t' read -r cwd branch proj title <<<"$fields"
+        IFS=$'\t' read -r cwd branch proj title turns <<<"$fields"
+        [[ "$turns" == 1 ]] || is_live "$id" "$live" || continue
         printf -v date '%(%Y-%m-%d %H:%M)T' "$mtime"
         if is_live "$id" "$live"; then live_mark="●"; else live_mark=" "; fi
         printf -v display '%-16s %1s  %-60.60s  %-20.20s  %s' \
@@ -274,6 +285,7 @@ case "${1:-}" in
     --action)      do_action "${2:-}" "${3:-}" "${4:-}" ;;  # internal: test/hook entry
     --end)         end_session "${2:-}" ;;                   # internal: fzf bind
     --block)       block_session "${2:-}" ;;                 # internal: fzf bind
+    --has-turns)   need jq rg; has_turns "${2:-}" ;;         # internal: test entry
     --help|-h)     usage ;;
     "")            interactive ;;
     *)             die "unknown option: $1 (try --help)" ;;
