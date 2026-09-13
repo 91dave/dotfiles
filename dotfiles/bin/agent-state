@@ -1,0 +1,436 @@
+#!/bin/bash
+
+set -uo pipefail
+
+SELF="$(command -v agent-state 2>/dev/null || realpath "$0")"
+
+PANE_OPT="@agent"
+WINDOW_OPT="@agent_win"
+DIR_OPT="@agent_dir"
+AGENT_COMMANDS="${AGENT_STATE_COMMANDS:-claude:pi:codex:aider:opencode}"
+STATE_DIR="${AGENT_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-state}"
+DETACHED_SESSION="not in tmux"
+
+ROW_FORMAT=$'#{'"$PANE_OPT"$'}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pane_id}\t#{pane_current_command}\t#{'"$DIR_OPT"$'}\t#{pane_current_path}'
+
+usage() {
+    cat <<'EOF'
+agent-state: track and surface AI agent states across every tmux session
+
+Agent hooks stamp a state onto their own tmux pane. Pane options live in the
+tmux server, so every state is readable from any session, attached or not.
+
+Usage:
+  agent-state set <state> [pane]   record a state
+  agent-state hook <state> [pane]  hook entry: records the state, and the directory
+                                   the agent reports it is working in
+  agent-state clear [pane]         drop a pane's state
+  agent-state ack [pane]           drop it only if the agent had finished
+  agent-state status [session]     server-wide roll-up for the status line, with
+                                   agents in the named session coloured as "here"
+  agent-state list                 one row per agent pane, for fzf
+  agent-state preview <pane>       render one pane's recent output
+  agent-state jump <pane>          focus a pane, switching session if needed
+  agent-state pick                 fzf picker over every agent pane
+  agent-state --help
+
+States, most urgent first:
+  permission 🔐  the agent wants permission to run something
+  question   ❓  the agent has asked you a question
+  plan       📝  the agent has a plan waiting for review
+  waiting    ✋  the agent is blocked on you for some other reason
+  done       ✅  the agent finished its turn, so it is your move
+  working    ⏳  the agent is busy
+  idle       💤  inferred, not stamped: an agent process with no state recorded
+
+Every command is safe to run outside tmux and safe to run against a pane that
+has already closed, so a hook can call it without ever failing the agent.
+
+Environment:
+  AGENT_STATE_COMMANDS   colon-separated process names treated as agents
+                         (default: claude:pi:codex:aider:opencode)
+
+Status colours are tmux options, so they can be changed live without editing
+any file. The bar picks the change up on its next refresh:
+
+  tmux set -g @agent_colour_here      white   # this session, matching the bar's own text
+  tmux set -g @agent_colour_elsewhere black   # any other session
+
+Any tmux style works. Keep the background out of it so the bar stays even.
+
+Wiring: see docs/tmux.md
+EOF
+}
+
+die() { echo "agent-state: $*" >&2; exit 2; }
+
+have_tmux() { command -v tmux >/dev/null 2>&1; }
+
+describes_why_blocked() {
+    case "${1:-}" in question|plan) return 0 ;; *) return 1 ;; esac
+}
+
+blocks_without_saying_why() {
+    case "${1:-}" in permission|waiting) return 0 ;; *) return 1 ;; esac
+}
+
+rank() {
+    case "${1:-}" in
+        permission) echo 6 ;;
+        question)   echo 5 ;;
+        plan)       echo 4 ;;
+        waiting)    echo 3 ;;
+        done)       echo 2 ;;
+        working)    echo 1 ;;
+        *)          echo 0 ;;
+    esac
+}
+
+glyph() {
+    case "${1:-}" in
+        permission) printf '🔐' ;;
+        question)   printf '❓' ;;
+        plan)       printf '📝' ;;
+        waiting)    printf '✋' ;;
+        working)    printf '⏳' ;;
+        done)       printf '✅' ;;
+        *)          printf '💤' ;;
+    esac
+}
+
+HERE_OPT="@agent_colour_here"
+ELSEWHERE_OPT="@agent_colour_elsewhere"
+HERE_DEFAULT="white"
+ELSEWHERE_DEFAULT="black"
+
+configured_colour() {  # configured_colour <tmux option> <default>
+    local value
+    value="$(tmux show-option -gqv "$1" 2>/dev/null)"
+    [[ -n "$value" ]] && printf '%s' "$value" || printf '%s' "$2"
+}
+
+window_of() {  # window_of <pane>
+    tmux display-message -p -t "$1" '#{session_name}:#{window_index}' 2>/dev/null
+}
+
+highest_ranked_state_in_window() {  # highest_ranked_state_in_window <window>
+    local state best="" best_rank=0 state_rank
+    while IFS= read -r state; do
+        state_rank="$(rank "$state")"
+        if (( state_rank > best_rank )); then
+            best_rank="$state_rank"
+            best="$state"
+        fi
+    done < <(tmux list-panes -t "$1" -F "#{${PANE_OPT}}" 2>/dev/null)
+    printf '%s' "$best"
+}
+
+mirror_state_onto_window() {  # mirror_state_onto_window <pane>
+    local window best
+    window="$(window_of "$1")"
+    [[ -n "$window" ]] || return 0
+
+    best="$(highest_ranked_state_in_window "$window")"
+    if [[ -n "$best" ]]; then
+        tmux set-option -w -t "$window" "$WINDOW_OPT" "$best" 2>/dev/null
+    else
+        tmux set-option -w -t "$window" -u "$WINDOW_OPT" 2>/dev/null
+    fi
+    return 0
+}
+
+supersedes() {  # supersedes <new state> <current state>
+    blocks_without_saying_why "$1" && describes_why_blocked "$2" && return 1
+    return 0
+}
+
+record_agent_state() {  # record_agent_state <agent pid> <state> <pane> <dir>
+    local id="$1" current=""
+    [[ -n "$id" ]] || return 0
+    mkdir -p "$STATE_DIR" 2>/dev/null || return 0
+    if blocks_without_saying_why "$2" && [[ -r "$STATE_DIR/$id" ]]; then
+        read -r current < "$STATE_DIR/$id"
+        supersedes "$2" "$current" || return 0
+    fi
+    printf '%s\n%s\n%s\n' "$2" "$3" "$4" > "$STATE_DIR/$id" 2>/dev/null
+    return 0
+}
+
+forget_agent_state() {  # forget_agent_state <agent pid>
+    [[ -n "${1:-}" ]] || return 0
+    rm -f "$STATE_DIR/$1" 2>/dev/null
+    return 0
+}
+
+set_state() {  # set_state <state> [pane]
+    local state="${1:-}" pane="${2:-${TMUX_PANE:-}}"
+    case "$state" in
+        working|waiting|done|permission|question|plan|idle) ;;
+        *) die "unknown state: ${state:-(none)}" ;;
+    esac
+    [[ -n "$pane" ]] || return 0
+    have_tmux || return 0
+
+    if blocks_without_saying_why "$state"; then
+        supersedes "$state" \
+            "$(tmux display-message -p -t "$pane" "#{${PANE_OPT}}" 2>/dev/null)" || return 0
+    fi
+
+    tmux set-option -p -t "$pane" "$PANE_OPT" "$state" 2>/dev/null || return 0
+    mirror_state_onto_window "$pane"
+    return 0
+}
+
+PARENT_PID=""
+
+set_parent_of() {  # set_parent_of <pid>
+    local stat rest
+    read -r stat < "/proc/$1/stat" 2>/dev/null || return 1
+    rest="${stat#*) }"
+    rest="${rest#* }"
+    PARENT_PID="${rest%% *}"
+    [[ -n "$PARENT_PID" ]]
+}
+
+agent_pid() {
+    local pid="$PPID" depth=0 comm
+    while [[ -n "$pid" && "$pid" != "0" && $depth -lt 8 ]]; do
+        read -r comm < "/proc/$pid/comm" 2>/dev/null || return 1
+        [[ ":$AGENT_COMMANDS:" == *":$comm:"* ]] && { printf '%s' "$pid"; return 0; }
+        set_parent_of "$pid" || return 1
+        pid="$PARENT_PID"
+        depth=$(( depth + 1 ))
+    done
+    return 1
+}
+
+record_agent_directory() {  # record_agent_directory <pane>
+    tmux set-option -p -t "$1" "$DIR_OPT" "$PWD" 2>/dev/null
+    return 0
+}
+
+hook() {  # hook <state> [pane]
+    local state="${1:-}" pane="${2:-${TMUX_PANE:-}}"
+    record_agent_state "$(agent_pid)" "$state" "$pane" "$PWD"
+    [[ -n "$pane" ]] || return 0
+    have_tmux || return 0
+    record_agent_directory "$pane"
+    set_state "$state" "$pane"
+}
+
+end_hook() {
+    forget_agent_state "$(agent_pid)"
+    clear_state "${1:-}"
+}
+
+clear_state() {  # clear_state [pane]
+    local pane="${1:-${TMUX_PANE:-}}"
+    [[ -n "$pane" ]] || return 0
+    have_tmux || return 0
+
+    tmux set-option -p -t "$pane" -u "$PANE_OPT" 2>/dev/null || return 0
+    mirror_state_onto_window "$pane"
+    return 0
+}
+
+live_pane_ids() {
+    have_tmux || return 0
+    tmux list-panes -a -F '#{pane_id}' 2>/dev/null | tr '\n' ' '
+}
+
+detached_rows() {
+    local file pid state pane dir project panes
+    panes=" $(live_pane_ids) "
+    for file in "$STATE_DIR"/*; do
+        [[ -f "$file" ]] || continue
+        pid="${file##*/}"
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        kill -0 "$pid" 2>/dev/null || { rm -f "$file" 2>/dev/null; continue; }
+
+        state=""; pane=""; dir=""
+        { read -r state; read -r pane; read -r dir; } < "$file"
+        [[ -n "$pane" && "$panes" == *" $pane "* ]] && continue
+
+        project="${dir%/}"
+        project="${project##*/}"
+        [[ -n "$project" ]] || project="/"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "${state:-idle}" "$DETACHED_SESSION" "$project" "!$pid" "claude" "$project" "$dir"
+    done
+    return 0
+}
+
+rows() {
+    tmux_rows
+    detached_rows
+}
+
+tmux_rows() {
+    have_tmux || return 0
+    tmux list-panes -a -F "$ROW_FORMAT" 2>/dev/null | awk -F'\t' -v cmds="$AGENT_COMMANDS" '
+        BEGIN { OFS = "\t"; n = split(cmds, list, ":"); for (i = 1; i <= n; i++) agent[list[i]] = 1 }
+        function emit(state,    dir, parts, depth, project) {
+            dir = ($7 != "" ? $7 : $8)
+            sub(/\/+$/, "", dir)
+            depth = split(dir, parts, "/")
+            project = (depth > 0 && parts[depth] != "") ? parts[depth] : "/"
+            print state, $2, project "-w" $3 "-p" $4, $5, $6, project, dir
+        }
+        $1 != "" { emit($1); next }
+        ($6 in agent) { emit("idle") }
+    '
+}
+
+stable_rows() {
+    local line session pane group
+    while IFS= read -r line; do
+        IFS=$'\t' read -r _ session _ pane _ <<<"$line"
+        [[ "$pane" == !* ]] && group=1 || group=0
+        printf '%s\t%s\t%s\t%s\n' "$group" "$session" "${pane#%}" "$line"
+    done < <(rows) | sort -t$'\t' -k1,1n -k2,2 -k3,3n | cut -f4-
+}
+
+sorted_rows() {
+    local line state
+    while IFS= read -r line; do
+        state="${line%%$'\t'*}"
+        printf '%s\t%s\n' "$(rank "$state")" "$line"
+    done < <(stable_rows) | sort -rn -k1,1 -s | cut -f2-
+}
+
+status() {  # status [session asking]
+    local asking="${1:-}" here elsewhere style
+    local state session label pane cmd project dir out="" sep=""
+    here="$(configured_colour "$HERE_OPT" "$HERE_DEFAULT")"
+    elsewhere="$(configured_colour "$ELSEWHERE_OPT" "$ELSEWHERE_DEFAULT")"
+
+    while IFS=$'\t' read -r state session label pane cmd project dir; do
+        [[ -n "$pane" ]] || continue
+        if [[ -n "$asking" && "$session" == "$asking" ]]; then
+            style="$here"
+        else
+            style="$elsewhere"
+        fi
+        out+="${sep}#[fg=${style}]$(glyph "$state") ${project}#[default]"
+        sep="  "
+    done < <(stable_rows)
+    printf '%s' "$out"
+}
+
+list() {
+    local state session label pane cmd project dir display
+    while IFS=$'\t' read -r state session label pane cmd project dir; do
+        [[ -n "$pane" ]] || continue
+        printf -v display '%s  %-10s  %-26.26s  %-20.20s  %s' \
+            "$(glyph "$state")" "$state" "$label" "$session" "${dir/#$HOME/\~}"
+        printf '%s\t%s\n' "$display" "$pane"
+    done < <(sorted_rows)
+}
+
+preview() {  # preview <pane>
+    local pane="${1:-}" height
+    [[ -n "$pane" ]] || return 0
+    have_tmux || return 0
+
+    if [[ "$pane" == !* ]]; then
+        printf 'Not running in tmux, so it cannot be shown or jumped to.\n'
+        return 0
+    fi
+
+    [[ -n "$(tmux display-message -p -t "$pane" '#{pane_id}' 2>/dev/null)" ]] \
+        || { echo "pane $pane has gone"; return 0; }
+
+    height="${FZF_PREVIEW_LINES:-40}"
+    tmux capture-pane -ep -t "$pane" 2>/dev/null \
+        | awk 'NF { for (; blank > 0; blank--) print ""; print; next } { blank++ }' \
+        | tail -n "$height"
+}
+
+acknowledge_if_finished() {  # acknowledge_if_finished [pane]
+    local pane="${1:-${TMUX_PANE:-}}"
+    [[ -n "$pane" ]] || return 0
+    have_tmux || return 0
+    [[ "$(tmux display-message -p -t "$pane" "#{${PANE_OPT}}" 2>/dev/null)" == "done" ]] || return 0
+    clear_state "$pane"
+}
+
+explain_unreachable() {  # explain_unreachable <pane>
+    local row dir
+    row="$(detached_rows | awk -F'\t' -v target="$1" '$4 == target { print; exit }')"
+    dir="$(printf '%s' "$row" | cut -f7)"
+    tmux display-message "agent-state: that agent is not running in tmux (${dir:-unknown directory})" 2>/dev/null
+    return 0
+}
+
+session_is_being_viewed() {  # session_is_being_viewed <session>
+    (( $(tmux list-clients -t "=$1" -F x 2>/dev/null | wc -l) > 0 ))
+}
+
+grouped_view_of() {  # grouped_view_of <session>
+    local session="$1" view="$1-view"
+    tmux has-session -t "=$view" 2>/dev/null \
+        || tmux new-session -d -t "=$session" -s "$view" 2>/dev/null \
+        || { printf '%s' "$session"; return 0; }
+    printf '%s' "$view"
+}
+
+jump() {  # jump <pane>
+    local pane="${1:-}" session target
+    [[ -n "$pane" ]] || return 0
+    have_tmux || return 0
+    [[ "$pane" == !* ]] && { explain_unreachable "$pane"; return 0; }
+
+    acknowledge_if_finished "$pane"
+
+    session="$(tmux display-message -p -t "$pane" \
+        '#{?session_group,#{session_group},#{session_name}}' 2>/dev/null)"
+    [[ -n "$session" ]] || return 0
+
+    if session_is_being_viewed "$session"; then
+        target="$(grouped_view_of "$session")"
+    else
+        target="$session"
+    fi
+
+    if [[ -n "${TMUX:-}" ]]; then
+        tmux switch-client -t "=$target" 2>/dev/null
+    else
+        tmux attach-session -t "=$target" 2>/dev/null
+    fi
+    tmux select-window -t "$pane" 2>/dev/null
+    tmux select-pane -t "$pane" 2>/dev/null
+    return 0
+}
+
+pick() {
+    command -v fzf >/dev/null 2>&1 || die "required tool not found: fzf"
+    [[ -n "$(list)" ]] || die "no agent panes found"
+
+    local out pane
+    out="$(list | fzf \
+        --ansi --delimiter '\t' --with-nth 1 \
+        --layout=reverse \
+        --prompt 'agent> ' \
+        --header 'enter: jump   •   🔐 permission   ❓ question   📝 plan   ✋ waiting   ✅ done   ⏳ working   💤 idle' \
+        --preview "$SELF preview {2}" \
+        --preview-window 'right,55%,nowrap')"
+    [[ -n "$out" ]] || return 0
+    pane="$(cut -f2 <<<"$out")"
+    jump "$pane"
+}
+
+case "${1:-}" in
+    set)       set_state "${2:-}" "${3:-}" ;;
+    hook)      hook "${2:-}" "${3:-}" ;;
+    clear)     clear_state "${2:-}" ;;
+    end)       end_hook "${2:-}" ;;
+    ack)       acknowledge_if_finished "${2:-}" ;;
+    status)    status "${2:-}" ;;
+    list)      list ;;
+    preview)   preview "${2:-}" ;;
+    jump)      jump "${2:-}" ;;
+    pick)      pick ;;
+    --help|-h) usage ;;
+    "")        usage ;;
+    *)         die "unknown command: $1 (try --help)" ;;
+esac
