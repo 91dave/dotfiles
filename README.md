@@ -47,6 +47,7 @@ Comprehensive documentation for all helper functions and aliases is available in
 - `atuin_help` - atuin install and usage notes
 - `aws_help` - AWS helpers
 - `cc [args]` - Launch Claude Code in a dedicated tmux session named after the current folder (requires tmux). If the folder has an `AGENTS.md`, auto-creates a `CLAUDE.md` importing it (`@AGENTS.md`) and hides that bridge via the local git exclude so Claude reads the repo's agent instructions without dirtying the tree
+- `agents` - Jump to any AI agent pane in any tmux session, waiting ones first. Agent hooks stamp their state onto their tmux pane, so the status bar shows which sessions need you and window tabs colour by agent state ([docs](docs/tmux.md))
 - `ce <cmd>` - Container engine manager (check/fix/help)
 - `dev_help` - Development helpers
 - `gws <cmd>` - Workspace manager (cd/claude/edit/cmd)
