@@ -6,12 +6,11 @@ SELF="$(command -v agent-state 2>/dev/null || realpath "$0")"
 
 PANE_OPT="@agent"
 WINDOW_OPT="@agent_win"
-DIR_OPT="@agent_dir"
 AGENT_COMMANDS="${AGENT_STATE_COMMANDS:-claude:pi:codex:aider:opencode}"
 STATE_DIR="${AGENT_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-state}"
 DETACHED_SESSION="not in tmux"
 
-ROW_FORMAT=$'#{'"$PANE_OPT"$'}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pane_id}\t#{pane_current_command}\t#{'"$DIR_OPT"$'}\t#{pane_current_path}'
+PANE_FORMAT=$'#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{session_group}'
 
 usage() {
     cat <<'EOF'
@@ -194,6 +193,7 @@ set_parent_of() {  # set_parent_of <pid>
 
 agent_pid() {
     local pid="$PPID" depth=0 comm
+    [[ -n "${AGENT_STATE_PID:-}" ]] && { printf '%s' "$AGENT_STATE_PID"; return 0; }
     while [[ -n "$pid" && "$pid" != "0" && $depth -lt 8 ]]; do
         read -r comm < "/proc/$pid/comm" 2>/dev/null || return 1
         [[ ":$AGENT_COMMANDS:" == *":$comm:"* ]] && { printf '%s' "$pid"; return 0; }
@@ -204,17 +204,11 @@ agent_pid() {
     return 1
 }
 
-record_agent_directory() {  # record_agent_directory <pane>
-    tmux set-option -p -t "$1" "$DIR_OPT" "$PWD" 2>/dev/null
-    return 0
-}
-
 hook() {  # hook <state> [pane]
     local state="${1:-}" pane="${2:-${TMUX_PANE:-}}"
     record_agent_state "$(agent_pid)" "$state" "$pane" "$PWD"
     [[ -n "$pane" ]] || return 0
     have_tmux || return 0
-    record_agent_directory "$pane"
     set_state "$state" "$pane"
 }
 
@@ -233,14 +227,29 @@ clear_state() {  # clear_state [pane]
     return 0
 }
 
-live_pane_ids() {
-    have_tmux || return 0
-    tmux list-panes -a -F '#{pane_id}' 2>/dev/null | tr '\n' ' '
+declare -A PANE_SESSION PANE_LABEL
+
+preferred_session_row() {  # preferred_session_row <pane> <session> <group>
+    [[ -z "${PANE_SESSION[$1]:-}" ]] && return 0
+    [[ -z "$3" || "$2" == "$3" ]]
 }
 
-detached_rows() {
-    local file pid state pane dir project panes
-    panes=" $(live_pane_ids) "
+load_panes() {
+    local pane session window index group
+    PANE_SESSION=(); PANE_LABEL=()
+    have_tmux || return 0
+    while IFS=$'\t' read -r pane session window index group; do
+        [[ -n "$pane" ]] || continue
+        preferred_session_row "$pane" "$session" "$group" || continue
+        PANE_SESSION[$pane]="$session"
+        PANE_LABEL[$pane]="w$window-p$index"
+    done < <(tmux list-panes -a -F "$PANE_FORMAT" 2>/dev/null)
+    return 0
+}
+
+rows() {
+    local file pid state pane dir project
+    load_panes
     for file in "$STATE_DIR"/*; do
         [[ -f "$file" ]] || continue
         pid="${file##*/}"
@@ -249,36 +258,21 @@ detached_rows() {
 
         state=""; pane=""; dir=""
         { read -r state; read -r pane; read -r dir; } < "$file"
-        [[ -n "$pane" && "$panes" == *" $pane "* ]] && continue
 
         project="${dir%/}"
         project="${project##*/}"
         [[ -n "$project" ]] || project="/"
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "${state:-idle}" "$DETACHED_SESSION" "$project" "!$pid" "claude" "$project" "$dir"
+
+        if [[ -n "$pane" && -n "${PANE_SESSION[$pane]:-}" ]]; then
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "${state:-idle}" "${PANE_SESSION[$pane]}" \
+                "$project-${PANE_LABEL[$pane]}" "$pane" "$project" "$dir"
+        else
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "${state:-idle}" "$DETACHED_SESSION" "$project" "!$pid" "$project" "$dir"
+        fi
     done
     return 0
-}
-
-rows() {
-    tmux_rows
-    detached_rows
-}
-
-tmux_rows() {
-    have_tmux || return 0
-    tmux list-panes -a -F "$ROW_FORMAT" 2>/dev/null | awk -F'\t' -v cmds="$AGENT_COMMANDS" '
-        BEGIN { OFS = "\t"; n = split(cmds, list, ":"); for (i = 1; i <= n; i++) agent[list[i]] = 1 }
-        function emit(state,    dir, parts, depth, project) {
-            dir = ($7 != "" ? $7 : $8)
-            sub(/\/+$/, "", dir)
-            depth = split(dir, parts, "/")
-            project = (depth > 0 && parts[depth] != "") ? parts[depth] : "/"
-            print state, $2, project "-w" $3 "-p" $4, $5, $6, project, dir
-        }
-        $1 != "" { emit($1); next }
-        ($6 in agent) { emit("idle") }
-    '
 }
 
 stable_rows() {
@@ -300,11 +294,11 @@ sorted_rows() {
 
 status() {  # status [session asking]
     local asking="${1:-}" here elsewhere style
-    local state session label pane cmd project dir out="" sep=""
+    local state session label pane project dir out="" sep=""
     here="$(configured_colour "$HERE_OPT" "$HERE_DEFAULT")"
     elsewhere="$(configured_colour "$ELSEWHERE_OPT" "$ELSEWHERE_DEFAULT")"
 
-    while IFS=$'\t' read -r state session label pane cmd project dir; do
+    while IFS=$'\t' read -r state session label pane project dir; do
         [[ -n "$pane" ]] || continue
         if [[ -n "$asking" && "$session" == "$asking" ]]; then
             style="$here"
@@ -318,8 +312,8 @@ status() {  # status [session asking]
 }
 
 list() {
-    local state session label pane cmd project dir display
-    while IFS=$'\t' read -r state session label pane cmd project dir; do
+    local state session label pane project dir display
+    while IFS=$'\t' read -r state session label pane project dir; do
         [[ -n "$pane" ]] || continue
         printf -v display '%s  %-10s  %-26.26s  %-20.20s  %s' \
             "$(glyph "$state")" "$state" "$label" "$session" "${dir/#$HOME/\~}"
@@ -355,15 +349,25 @@ acknowledge_if_finished() {  # acknowledge_if_finished [pane]
 }
 
 explain_unreachable() {  # explain_unreachable <pane>
-    local row dir
-    row="$(detached_rows | awk -F'\t' -v target="$1" '$4 == target { print; exit }')"
-    dir="$(printf '%s' "$row" | cut -f7)"
+    local dir=""
+    [[ -r "$STATE_DIR/${1#!}" ]] && { read -r _; read -r _; read -r dir; } < "$STATE_DIR/${1#!}"
     tmux display-message "agent-state: that agent is not running in tmux (${dir:-unknown directory})" 2>/dev/null
     return 0
 }
 
 session_is_being_viewed() {  # session_is_being_viewed <session>
     (( $(tmux list-clients -t "=$1" -F x 2>/dev/null | wc -l) > 0 ))
+}
+
+discard_unwatched_views() {  # discard_unwatched_views <session>
+    local name
+    while IFS= read -r name; do
+        [[ -n "$name" ]] || continue
+        tmux kill-session -t "=$name" 2>/dev/null
+    done < <(tmux list-sessions \
+        -f "#{&&:#{==:#{session_group},$1},#{&&:#{!=:#{session_name},$1},#{==:#{session_attached},0}}}" \
+        -F '#{session_name}' 2>/dev/null)
+    return 0
 }
 
 grouped_view_of() {  # grouped_view_of <session>
@@ -385,6 +389,7 @@ jump() {  # jump <pane>
     session="$(tmux display-message -p -t "$pane" \
         '#{?session_group,#{session_group},#{session_name}}' 2>/dev/null)"
     [[ -n "$session" ]] || return 0
+    discard_unwatched_views "$session"
 
     if session_is_being_viewed "$session"; then
         target="$(grouped_view_of "$session")"

@@ -53,8 +53,10 @@ pane_opt() { tmux display-message -p -t "$1" "#{$2}"; }
 WORK_ROOT="$(mktemp -d)"
 
 hook_in() {  # hook_in <folder name> <state> <pane>
+    local pid
     mkdir -p "$WORK_ROOT/$1"
-    ( cd "$WORK_ROOT/$1" && "$SUT" hook "$2" "$3" )
+    pid="$(tmux display-message -p -t "$3" '#{pane_pid}' 2>/dev/null)"
+    ( cd "$WORK_ROOT/$1" && AGENT_STATE_PID="${pid:-$$}" "$SUT" hook "$2" "$3" )
 }
 
 new_agent_session() {  # new_agent_session <name> [pane count]
@@ -205,13 +207,13 @@ hook_in ccc working "$OC"
 ORDER_BEFORE="$("$SUT" status | rg -o 'aaa|bbb|ccc' | tr '\n' ' ')"
 check "orders by session, not by state" "aaa bbb ccc " "$ORDER_BEFORE"
 
-"$SUT" set permission "$OC"
-"$SUT" set done "$OA"
+hook_in ccc permission "$OC"
+hook_in aaa done       "$OA"
 ORDER_AFTER="$("$SUT" status | rg -o 'aaa|bbb|ccc' | tr '\n' ' ')"
 check "the order does not move when states change" "$ORDER_BEFORE" "$ORDER_AFTER"
 
-"$SUT" set working "$OC"
-"$SUT" set permission "$OB"
+hook_in ccc working    "$OC"
+hook_in bbb permission "$OB"
 check "nor when a different agent becomes the urgent one" "$ORDER_BEFORE" \
     "$("$SUT" status | rg -o 'aaa|bbb|ccc' | tr '\n' ' ')"
 
@@ -252,20 +254,26 @@ reset_server
 new_agent_session eta
 new_agent_session theta
 H=$(tmux list-panes -t eta -F '#{pane_id}' | head -1)
-"$SUT" set permission "$H"
+T=$(tmux list-panes -t theta -F '#{pane_id}' | head -1)
+hook_in eta-proj   permission "$H"
+hook_in theta-proj idle       "$T"
 LIST="$("$SUT" list)"
-contains "includes the stamped pane" "permission" "$LIST"
+contains "includes the agent's state" "permission" "$LIST"
 contains "shows the state's glyph" "🔐" "$LIST"
-contains "reports an unstamped agent pane as idle" "idle" "$LIST"
+contains "includes an idle agent" "idle" "$LIST"
 contains "shows the idle glyph" "💤" "$LIST"
-contains "labels a pane by folder, window and pane" "$(basename "$PWD")-w0-p0" "$LIST"
+contains "labels a pane by folder, window and pane" "eta-proj-w0-p0" "$LIST"
 check "never renders the session:window.pane form" "" "$(printf '%s' "$LIST" | rg -o 'eta:0\.0' || true)"
 contains "keeps the session name in its own column" "eta" "$LIST"
-check "emits one row per agent pane" "3" "$(printf '%s\n' "$LIST" | wc -l)"
+check "emits one row per agent, not per pane" "2" "$(printf '%s\n' "$LIST" | wc -l)"
 check "ends each row with the pane id" "$H" "$(printf '%s\n' "$LIST" | rg permission | cut -f2)"
 
 tmux new-window -d -t eta -n editor 'cat'
-check "excludes panes not running an agent" "3" "$("$SUT" list | wc -l)"
+check "a pane with no agent in it is not listed" "2" "$("$SUT" list | wc -l)"
+
+"$SUT" set done "$H"
+check "stamping a pane by hand does not invent an agent" "2" "$("$SUT" list | wc -l)"
+check "but it does colour that pane's window" "done" "$(pane_opt eta:0 @agent_win)"
 
 echo
 echo "jump"
@@ -289,9 +297,11 @@ reset_server
 tmux new-session -d -s tenant-alpha 'sleep 600'
 N=$(tmux list-panes -t tenant-alpha -F '#{pane_id}' | head -1)
 
+NPID=$(tmux display-message -p -t "$N" '#{pane_pid}')
 hook_in qtms-widget working "$N"
 check "a hook records the directory the agent is working in" \
-    "$WORK_ROOT/qtms-widget" "$(pane_opt "$N" @agent_dir)"
+    "$WORK_ROOT/qtms-widget" "$(sed -n 3p "$STATE_ROOT/$NPID")"
+check "a hook records the pane it is running in" "$N" "$(sed -n 2p "$STATE_ROOT/$NPID")"
 check "a hook still records the state" "working" "$(pane_opt "$N" @agent)"
 
 LABELLED="$("$SUT" list | rg qtms-widget)"
@@ -305,13 +315,8 @@ check "status does not name the session" "" "$(printf '%s' "$STATUS" | rg -o 'te
 
 hook_in qtms-relocated working "$N"
 check "the recorded directory follows the agent if it moves" \
-    "$WORK_ROOT/qtms-relocated" "$(pane_opt "$N" @agent_dir)"
-
-reset_server
-new_agent_session tenant-beta
-B=$(tmux list-panes -t tenant-beta -F '#{pane_id}' | head -1)
-"$SUT" set working "$B"
-contains "an unstamped pane falls back to its own path" "$(basename "$PWD")-w0-p0" "$("$SUT" list)"
+    "$WORK_ROOT/qtms-relocated" "$(sed -n 3p "$STATE_ROOT/$NPID")"
+contains "and so does the label" "qtms-relocated-w0-p0" "$("$SUT" list)"
 
 echo
 echo "state precedence"
@@ -423,6 +428,22 @@ kill "$LIVE_PID" 2>/dev/null
 rm -f "$STATE_DIR"/* 2>/dev/null
 
 echo
+echo "grouped sessions"
+
+reset_server
+new_agent_session grouped
+tmux new-session -d -t grouped -s grouped-view
+GP=$(tmux list-panes -t grouped -F '#{pane_id}' | head -1)
+hook_in grouped-proj working "$GP"
+
+check "a shared window is listed once, not once per session" "1" \
+    "$("$SUT" list | rg -c "$GP" || echo 0)"
+check "the original session is the one named, not the view" "grouped" \
+    "$("$SUT" list | rg "$GP" | rg -o 'grouped-view|grouped' | tail -1)"
+check "the status bar does not double-count it" "1" \
+    "$("$SUT" status | rg -o 'grouped-proj' | wc -l)"
+
+echo
 echo "jumping into a session someone is already viewing"
 
 reset_server
@@ -446,6 +467,11 @@ TMUX=fake "$SUT" jump "$SP" >/dev/null 2>&1
 check "a second jump reuses that view rather than stacking up" "1" \
     "$(tmux list-sessions -F '#{session_name}' | rg -c 'shared-a-view' || echo 0)"
 kill "$VIEWER" 2>/dev/null
+sleep 1
+
+TMUX=fake "$SUT" jump "$SP" >/dev/null 2>&1
+check "a view nobody is attached to is cleaned up" "0" \
+    "$(tmux list-sessions -F '#{session_name}' | rg -c 'shared-a-view' || echo 0)"
 
 echo
 echo "hook configuration"

@@ -91,12 +91,25 @@ working                            the state
 /mnt/c/Code/_personal/dotfiles     its working directory
 ```
 
-**Tmux options, only when the agent is in a pane**: `@agent` and `@agent_dir` on the pane,
-and `@agent_win` on the window. Pane options live in the **tmux server**, not the client,
-so they are readable from any session, attached or detached.
+**Tmux options, only when the agent is in a pane**: `@agent` on the pane and `@agent_win`
+on the window. These exist solely so tmux formats can colour window tabs, which they can
+only do by reading an option directly.
 
-The state file is the single source of truth; the tmux options exist because tmux formats
-have to read them directly to colour window tabs.
+### Reading starts from the state files, never from tmux
+
+The state directory **is** the list of agents: one file per agent, so duplicates are not
+possible. Reading walks that directory and maps each recorded pane back to its tmux
+session, rather than the other way round.
+
+Starting from tmux instead looks tempting, and is wrong. A grouped session shares its
+windows, so `tmux list-panes -a` reports the same pane once per session in the group, and
+every agent in a grouped session appears twice. Keyed by pane, those collapse to one
+entry for free, and the session named after the group is the one shown.
+
+The consequence to know about: an agent with no state file does not appear at all. There
+is no process-name detection any more. Since `SessionStart` writes the file the moment an
+agent boots, the only agents this hides are ones whose tool has no hooks wired up, `pi`
+among them.
 
 ### Why the hook costs almost nothing
 
@@ -161,9 +174,9 @@ test asserts no unmatched Notification hook creeps back in.
 rather than leaving it until the turn ends. It is the only hook on a hot path; drop it
 from `dotfiles/claude/settings.json` if hook latency ever matters more than that.
 
-Agents without hook support never get stamped. They still appear as `idle` because
-`agent-state` falls back to matching the pane's process name against
-`AGENT_STATE_COMMANDS` (default `claude:pi:codex:aider:opencode`).
+`AGENT_STATE_COMMANDS` (default `claude:pi:codex:aider:opencode`) is the list of process
+names treated as agents. It is used only when a hook identifies which ancestor process it
+belongs to, not for discovering agents.
 
 ### Why there is a second, window-level option
 
@@ -262,13 +275,9 @@ The first pane is an agent working on `dotfiles` inside a session called
 `cc-qtms-publication`. The label tells you what it is working on, the second column tells
 you where to find it, and the path disambiguates two worktrees sharing a basename.
 
-The folder is resolved in two steps:
-
-1. `@agent_dir`, the directory the hook itself was running in. This is authoritative: it
-   is the agent's own working directory, and it survives any `cd` inside the pane, since
-   that happens in a subshell the agent never leaves.
-2. Failing that, the pane's `pane_current_path`. This covers hookless agents such as `pi`,
-   and any pane that has not run a hook yet.
+The folder comes from the state file, recorded as the directory the hook itself was
+running in. That is the agent's own working directory, and it survives any `cd` inside the
+pane, since those happen in a subshell the agent never leaves.
 
 The status bar names folders for the same reason:
 
