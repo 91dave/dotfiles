@@ -13,3 +13,7 @@
 [credential "https://gist.github.com"]
 	helper = 
 	helper = !/home/dave/.local/bin/gh auth git-credential
+[core]
+	hooksPath = /home/dave/.git-hooks
+[hooks]
+	maxCommitBodyLines = 2
