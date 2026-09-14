@@ -279,6 +279,61 @@ The folder comes from the state file, recorded as the directory the hook itself 
 running in. That is the agent's own working directory, and it survives any `cd` inside the
 pane, since those happen in a subshell the agent never leaves.
 
+### Session titles
+
+Where Claude has given a session a title, that is shown instead of the folder:
+
+```
+✅ dave: Failed publish alert Production   ⏳ dotfiles: show-claude-session-title   💤 qtms-publication
+```
+
+The third has no title yet, so it falls back to the bare folder. There is never a dangling
+`folder: ` prefix.
+
+**Inside tmux the title is free.** Claude sets the pane title, so `pane_title` already
+carries it and `load_panes()` picks it up from the `list-panes` call it was making anyway.
+The leading status glyph (`✳ `) is stripped, and the literal `Claude Code` is treated as
+"no title yet".
+
+**Outside tmux it has to be read.** tmux fills `pane_title` from an escape sequence the
+application emits; with no tmux in between that escape reaches the terminal and is gone.
+Nothing in `/proc` or the session marker keeps it. So for those agents the `Stop` hook
+reads the last `{"type":"ai-title"}` line from the transcript and caches it in
+`<agent pid>.title` beside the state file.
+
+That read only happens when the agent is **both** finishing a turn **and** outside tmux, so
+the common path stays free. It tails the last 256KB rather than scanning the file: titles
+are rewritten every turn and the last one sits a median 13 lines from the end, never more
+than 30 across 87 transcripts here, while the files themselves run to megabytes.
+
+Titles are free text, so a `#` is escaped to `##` before it can reach the status bar, where
+tmux would otherwise read it as a format directive.
+
+### Fitting the bar
+
+`agent-state status --with-folder` renders `folder: title` rather than just the title, and
+`--width` tells it how many columns the client has. `tmux.conf` passes both, taking the
+width from `#{client_width}` so the bar adapts to the actual terminal.
+
+**No agent is ever dropped to make room.** Letting the bar overflow would have tmux
+truncate the right-hand end, and since entries are ordered by session, the agent that
+vanished would be arbitrary rather than the least important. One needing your attention
+could disappear. So detail is shed instead, in order of how little it tells you:
+
+| Room | Shown | Roughly |
+|------|-------|---------|
+| Plenty | `service-00: Refactoring the storage laye` | up to ~4 agents |
+| Less | `Refactoring the st` | ~8 agents |
+| Less still | `Refactorin` | ~12 agents |
+| Tight | `service-00` | ~16 agents |
+
+The folder goes before the title does, because the title says more about what an agent is
+doing. Titles are capped at 28 characters however much room there is, and are dropped
+entirely rather than shown below 8, where they read as noise.
+
+Those bands assume a 236-column terminal and short folder names; the calculation is
+per-render, from the real width and the longest folder in play.
+
 The status bar names folders for the same reason:
 
 ```
