@@ -50,10 +50,18 @@ contains() {  # contains <name> <needle> <haystack>
 
 pane_opt() { tmux display-message -p -t "$1" "#{$2}"; }
 
+discard_inherited_shell_titles() {
+    local pane
+    while IFS= read -r pane; do
+        [[ -n "$pane" ]] && tmux select-pane -t "$pane" -T ''
+    done < <(tmux list-panes -a -F '#{pane_id}' 2>/dev/null)
+}
+
 WORK_ROOT="$(mktemp -d)"
 
 hook_in() {  # hook_in <folder name> <state> <pane>
     local pid
+    discard_inherited_shell_titles
     mkdir -p "$WORK_ROOT/$1"
     pid="$(tmux display-message -p -t "$3" '#{pane_pid}' 2>/dev/null)"
     ( cd "$WORK_ROOT/$1" && AGENT_STATE_PID="${pid:-$$}" "$SUT" hook "$2" "$3" )
@@ -426,6 +434,195 @@ check "jumping to one fails safely" "0" "$?"
 
 kill "$LIVE_PID" 2>/dev/null
 rm -f "$STATE_DIR"/* 2>/dev/null
+
+echo
+echo "session titles"
+
+set_title() { tmux select-pane -t "$1" -T "$2"; }
+
+reset_server
+new_agent_session titled
+TP=$(tmux list-panes -t titled -F '#{pane_id}' | head -1)
+hook_in titled-proj working "$TP"
+
+set_title "$TP" '✳ Rework the billing importer'
+contains "the title replaces the label in the picker" "Rework the billing importer" "$("$SUT" list)"
+check "the picker drops the folder label when titled" "" \
+    "$(printf '%s' "$("$SUT" list)" | rg -o 'titled-proj-w0-p0' || true)"
+contains "the title replaces the folder in the status bar" "⏳ Rework the billing importer" \
+    "$("$SUT" status)"
+check "the status glyph prefix is stripped" "" \
+    "$(printf '%s' "$("$SUT" status)" | rg -o '✳' || true)"
+
+set_title "$TP" '✳ Claude Code'
+contains "the placeholder title falls back to the folder" "⏳ titled-proj" "$("$SUT" status)"
+check "and leaves no dangling separator" "" \
+    "$(printf '%s' "$("$SUT" status)" | rg -o 'titled-proj:' || true)"
+contains "the picker falls back to its label" "titled-proj-w0-p0" "$("$SUT" list)"
+
+set_title "$TP" ''
+contains "an empty title falls back to the folder" "⏳ titled-proj" "$("$SUT" status)"
+
+echo
+echo "titles with the folder prefixed"
+
+set_title "$TP" '✳ Rework the billing importer'
+contains "--with-folder names both" "⏳ titled-proj: Rework the billing importer" \
+    "$("$SUT" status --with-folder)"
+contains "the flag works before the session too" "titled-proj: Rework" \
+    "$("$SUT" status --with-folder titled)"
+contains "and after it" "titled-proj: Rework" "$("$SUT" status titled --with-folder)"
+contains "the session is still read as the session" "#[fg=white]" "$("$SUT" status titled --with-folder)"
+
+set_title "$TP" '✳ Claude Code'
+contains "with no title it is still just the folder" "⏳ titled-proj" "$("$SUT" status --with-folder)"
+check "with no title there is no separator" "" \
+    "$(printf '%s' "$("$SUT" status --with-folder)" | rg -o 'titled-proj:' || true)"
+
+set_title "$TP" "✳ $(printf 'x%.0s' {1..80})"
+check "a long title is truncated" "" \
+    "$(printf '%s' "$("$SUT" status --with-folder)" | rg -o 'x{40}' || true)"
+contains "but enough of it is shown to read" "xxxxxxxxxx" "$("$SUT" status --with-folder)"
+contains "and the folder survives truncation" "titled-proj: " "$("$SUT" status --with-folder)"
+
+set_title "$TP" '✳ fix #42 in the parser'
+check "a hash in a title is escaped for tmux" "1" \
+    "$("$SUT" status | rg -o '##42' | wc -l)"
+
+echo
+echo "titles for agents outside tmux"
+
+FIXTURE="$WORK_ROOT/fixture.jsonl"
+printf '%s\n' \
+    '{"type":"user","message":{"content":"hi"}}' \
+    '{"type":"ai-title","aiTitle":"An older title"}' \
+    '{"type":"assistant"}' \
+    '{"type":"ai-title","aiTitle":"Refactor the S3 sweeper"}' > "$FIXTURE"
+
+detached_hook() {  # detached_hook <pid> <state> <payload>
+    mkdir -p "$WORK_ROOT/detached-proj"
+    printf '%s' "$3" | ( cd "$WORK_ROOT/detached-proj" \
+        && env -u TMUX_PANE AGENT_STATE_PID="$1" "$SUT" hook "$2" )
+}
+
+reset_server
+sleep 600 &
+DETACHED_PID=$!
+
+detached_hook "$DETACHED_PID" done "{\"transcript_path\":\"$FIXTURE\"}"
+check "finishing a turn records the title" "Refactor the S3 sweeper" \
+    "$(cat "$STATE_ROOT/$DETACHED_PID.title" 2>/dev/null)"
+check "it takes the most recent one, not the first" "" \
+    "$(rg -o 'An older title' "$STATE_ROOT/$DETACHED_PID.title" 2>/dev/null || true)"
+contains "the title reaches the picker" "Refactor the S3 sweeper" "$("$SUT" list)"
+contains "and the status bar" "✅ Refactor the S3 sweeper" "$("$SUT" status)"
+contains "with the folder when asked" "detached-proj: Refactor" "$("$SUT" status --with-folder)"
+
+rm -f "$STATE_ROOT/$DETACHED_PID.title"
+detached_hook "$DETACHED_PID" working "{\"transcript_path\":\"$FIXTURE\"}"
+check "a mid-turn hook does not pay the cost" "1" \
+    "$([[ -f "$STATE_ROOT/$DETACHED_PID.title" ]] && echo 0 || echo 1)"
+
+detached_hook "$DETACHED_PID" done '{}'
+check "a payload without a transcript is ignored" "1" \
+    "$([[ -f "$STATE_ROOT/$DETACHED_PID.title" ]] && echo 0 || echo 1)"
+
+detached_hook "$DETACHED_PID" done '{"transcript_path":"/nowhere/missing.jsonl"}'
+check "a transcript that is not there is ignored" "1" \
+    "$([[ -f "$STATE_ROOT/$DETACHED_PID.title" ]] && echo 0 || echo 1)"
+
+printf '%s\n' '{"type":"assistant"}' > "$WORK_ROOT/untitled.jsonl"
+detached_hook "$DETACHED_PID" done "{\"transcript_path\":\"$WORK_ROOT/untitled.jsonl\"}"
+check "a transcript with no title leaves no sidecar" "1" \
+    "$([[ -f "$STATE_ROOT/$DETACHED_PID.title" ]] && echo 0 || echo 1)"
+
+printf '%s\n' '{"type":"ai-title","aiTitle":"fix #42 in the parser"}' > "$WORK_ROOT/hash.jsonl"
+detached_hook "$DETACHED_PID" done "{\"transcript_path\":\"$WORK_ROOT/hash.jsonl\"}"
+check "a hash is escaped before it reaches tmux" "1" \
+    "$("$SUT" status | rg -o '##42' | wc -l)"
+
+detached_hook "$DETACHED_PID" done "{\"transcript_path\":\"$FIXTURE\"}"
+env -u TMUX_PANE AGENT_STATE_PID="$DETACHED_PID" "$SUT" end </dev/null
+check "ending the session clears the title too" "1" \
+    "$([[ -f "$STATE_ROOT/$DETACHED_PID.title" ]] && echo 0 || echo 1)"
+
+detached_hook "$DETACHED_PID" done "{\"transcript_path\":\"$FIXTURE\"}"
+kill "$DETACHED_PID" 2>/dev/null
+sleep 1
+"$SUT" list >/dev/null
+check "a dead agent's title is tidied away with its state" "1" \
+    "$([[ -f "$STATE_ROOT/$DETACHED_PID.title" ]] && echo 0 || echo 1)"
+
+reset_server
+new_agent_session in-tmux
+IT=$(tmux list-panes -t in-tmux -F '#{pane_id}' | head -1)
+ITPID=$(tmux display-message -p -t "$IT" '#{pane_pid}')
+printf '{"transcript_path":"%s"}' "$FIXTURE" | ( cd "$WORK_ROOT" \
+    && AGENT_STATE_PID="$ITPID" "$SUT" hook done "$IT" )
+check "an agent in tmux never pays for a transcript read" "1" \
+    "$([[ -f "$STATE_ROOT/$ITPID.title" ]] && echo 0 || echo 1)"
+
+echo
+echo "many agents at once"
+
+CROWD=()
+make_crowd() {  # make_crowd <count>
+    local i pid
+    for (( i = 0; i < $1; i++ )); do
+        sleep 600 &
+        pid=$!
+        CROWD+=("$pid")
+        printf 'working\n\n/work/project-%02d\n' "$i" > "$STATE_ROOT/$pid"
+        printf 'A reasonably long session title %02d\n' "$i" > "$STATE_ROOT/$pid.title"
+    done
+}
+
+visible_width() {  # visible_width <status output>
+    local plain
+    plain="$(printf '%s' "$1" | sed 's/#\[[^]]*\]//g')"
+    printf '%s' "${#plain}"
+}
+
+reset_server
+tmux kill-session -t scaffold
+make_crowd 10
+
+WIDE="$("$SUT" status --with-folder --width 900)"
+MID="$("$SUT" status --with-folder --width 320)"
+TINY="$("$SUT" status --with-folder --width 120)"
+
+for label in WIDE MID TINY; do
+    check "every agent survives a $label bar" "10" \
+        "$(printf '%s' "${!label}" | rg -o 'project-' | wc -l)"
+done
+
+contains "a wide bar shows the full title" "A reasonably long session ti" "$WIDE"
+check "a middling bar shortens the title" "" \
+    "$(printf '%s' "$MID" | rg -o 'A reasonably long session ti' || true)"
+contains "but keeps enough to read" "A reason" "$MID"
+check "a tight bar drops titles rather than agents" "" \
+    "$(printf '%s' "$TINY" | rg -o 'A reason' || true)"
+contains "and still names every folder" "project-09" "$TINY"
+
+check "less room means a shorter bar" "1" \
+    "$([[ $(visible_width "$TINY") -lt $(visible_width "$MID") ]] && echo 1 || echo 0)"
+check "and more room means a longer one" "1" \
+    "$([[ $(visible_width "$MID") -lt $(visible_width "$WIDE") ]] && echo 1 || echo 0)"
+
+check "a title is capped even when there is room to spare" "" \
+    "$(printf '%s' "$WIDE" | rg -o 'session title 00' || true)"
+
+SQUEEZED="$("$SUT" status --with-folder --width 220)"
+contains "when space runs short the folder goes before the title" "A reason" "$SQUEEZED"
+check "and the folder prefix is the part dropped" "" \
+    "$(printf '%s' "$SQUEEZED" | rg -o 'project-00:' || true)"
+check "every agent is still there" "10" \
+    "$(printf '%s' "$SQUEEZED" | rg -o '⏳' | wc -l)"
+
+for pid in "${CROWD[@]}"; do kill "$pid" 2>/dev/null; done
+CROWD=()
+sleep 1
+"$SUT" list >/dev/null
 
 echo
 echo "grouped sessions"
