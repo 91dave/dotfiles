@@ -744,12 +744,15 @@ echo "focus hooks"
 TMUXCONF="$SELF_DIR/../tmux.conf"
 
 acknowledges_on() {  # acknowledges_on <tmux hook>
-    rg -c "set-hook -ga $1 .*agent-state ack" "$TMUXCONF" 2>/dev/null || echo 0
+    rg -c "set-hook -g $1 .*agent-state ack" "$TMUXCONF" 2>/dev/null || echo 0
 }
 
 for focus_hook in after-select-pane after-select-window pane-focus-in client-session-changed; do
     check "arriving via $focus_hook acknowledges" "1" "$(acknowledges_on "$focus_hook")"
 done
+
+check "re-sourcing replaces the hooks rather than stacking them" "0" \
+    "$(rg -c 'set-hook -ga .*agent-state ack' "$TMUXCONF" 2>/dev/null || echo 0)"
 
 echo
 echo "alerts"
