@@ -752,6 +752,49 @@ for focus_hook in after-select-pane after-select-window pane-focus-in client-ses
 done
 
 echo
+echo "alerts"
+
+reset_server
+new_agent_session watched
+new_agent_session elsewhere
+WATCHED=$(tmux list-panes -t watched -F '#{pane_id}' | head -1)
+AWAY=$(tmux list-panes -t elsewhere -F '#{pane_id}' | head -1)
+script -qc "$(command -v tmux) -L $SOCKET attach -t watched" /dev/null >/dev/null 2>&1 &
+ONLOOKER=$!
+sleep 2
+TTY=$(tmux list-clients -F '#{client_tty}' | head -1)
+
+toasts() {  # toasts <text>
+    tmux show-messages -t "$TTY" 2>/dev/null | rg -c "message: $1" || echo 0
+}
+
+hook_in ledger working "$AWAY"
+check "a busy agent says nothing" "0" "$(toasts '⏳ ledger')"
+
+hook_in ledger done "$AWAY"
+check "finishing raises a toast on the terminal you are on" "1" "$(toasts '✅ ledger')"
+
+hook_in ledger done "$AWAY"
+check "repeating a state does not toast twice" "1" "$(toasts '✅ ledger')"
+
+hook_in ledger working "$AWAY"
+hook_in ledger question "$AWAY"
+check "a question raises its own toast" "1" "$(toasts '❓ ledger')"
+
+hook_in ledger working "$AWAY"
+check "going back to work says nothing" "0" "$(toasts '⏳ ledger')"
+
+hook_in onlooker working "$WATCHED"
+hook_in onlooker done "$WATCHED"
+check "the agent you are already watching does not toast you" "0" "$(toasts '✅ onlooker')"
+
+( unset TMUX_PANE; cd "$WORK_ROOT" && AGENT_STATE_PID=$$ "$SUT" hook done )
+check "an agent outside tmux still toasts" "1" "$(toasts "✅ ${WORK_ROOT##*/}")"
+
+kill "$ONLOOKER" 2>/dev/null
+sleep 1
+
+echo
 echo "hook safety"
 
 reset_server

@@ -16,6 +16,7 @@ GROUP_TAG="g:"
 TRANSCRIPT_TAIL=262144
 PANE_FORMAT=$'#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t'"$GROUP_TAG"$'#{session_group}\t#{pane_title}'
 UNTITLED="Claude Code"
+ALERT_MS=4000
 TITLE_WIDTH=28
 MIN_TITLE_WIDTH=8
 ENTRY_OVERHEAD=5
@@ -54,6 +55,10 @@ States, most urgent first:
   idle       💤  the agent is up with nothing to report, either because it has
                  only just booted or because you acknowledged the turn it finished
 
+Reaching a state that wants your attention flashes a message on every attached
+terminal except one already sitting on that agent, and the message expires on its
+own, so there is never an alert to clear.
+
 Every command is safe to run outside tmux and safe to run against a pane that
 has already closed, so a hook can call it without ever failing the agent.
 
@@ -83,6 +88,10 @@ describes_why_blocked() {
 
 blocks_without_saying_why() {
     case "${1:-}" in permission|waiting) return 0 ;; *) return 1 ;; esac
+}
+
+wants_attention() {
+    describes_why_blocked "$1" || blocks_without_saying_why "$1" || [[ "${1:-}" == "done" ]]
 }
 
 rank() {
@@ -155,15 +164,37 @@ supersedes() {  # supersedes <new state> <current state>
     return 0
 }
 
+announce_to_other_clients() {  # announce_to_other_clients <pane> <state> <dir>
+    local tty focused project title message
+    have_tmux || return 0
+
+    project="${3%/}"
+    project="${project##*/}"
+    message="$(glyph "$2") ${project:-/}"
+
+    if [[ -n "$1" ]]; then
+        title="$(readable_title "$(tmux display-message -p -t "$1" '#{pane_title}' 2>/dev/null)")"
+        [[ -n "$title" ]] && message+=": $title"
+    fi
+
+    while IFS=$'\t' read -r tty focused; do
+        [[ -n "$tty" && "$focused" != "$1" ]] || continue
+        tmux display-message -c "$tty" -d "$ALERT_MS" "$message" 2>/dev/null
+    done < <(tmux list-clients -F "#{client_tty}"$'\t'"#{pane_id}" 2>/dev/null)
+    return 0
+}
+
 record_agent_state() {  # record_agent_state <agent pid> <state> <pane> <dir>
     local id="$1" current=""
     [[ -n "$id" ]] || return 0
     mkdir -p "$STATE_DIR" 2>/dev/null || return 0
-    if blocks_without_saying_why "$2" && [[ -r "$STATE_DIR/$id" ]]; then
-        read -r current < "$STATE_DIR/$id"
+    [[ -r "$STATE_DIR/$id" ]] && read -r current < "$STATE_DIR/$id"
+    if blocks_without_saying_why "$2"; then
         supersedes "$2" "$current" || return 0
     fi
     printf '%s\n%s\n%s\n' "$2" "$3" "$4" > "$STATE_DIR/$id" 2>/dev/null
+    [[ "$2" != "$current" ]] && wants_attention "$2" \
+        && announce_to_other_clients "$3" "$2" "$4"
     return 0
 }
 

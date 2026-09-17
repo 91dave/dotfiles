@@ -319,6 +319,39 @@ sitting in. No focus hook fires, because focus never changed, so its ✅ stands 
 leave and come back. Clearing it would mean treating "attached to that session" as "looking
 at the screen", which is not the same thing.
 
+### Alerts
+
+Reaching a state that wants your attention flashes a one-line message on every attached
+terminal:
+
+```
+✅ dotfiles: Quality of life updates for agent-state
+```
+
+It expires by itself after four seconds, so **there is never an alert to clear**, in one
+session or twelve. That is the whole reason for the design. tmux's own `monitor-bell` and
+`monitor-activity` were rejected for the opposite property: they raise a per-window `!`
+flag that has to be cleared by visiting each window, and a grouped session shows the same
+flag more than once.
+
+Two rules keep it quiet:
+
+- **A terminal already sitting on that agent is skipped.** You are looking at it; a toast
+  telling you what you can see is noise.
+- **The alert is edge-triggered**, raised by the hook on the transition into the state, not
+  polled. The bar refreshes every five seconds, so a level-triggered alert would fire
+  forever. Re-recording the same state, which `PostToolUse` does constantly, says nothing.
+
+`working` and `idle` never alert. `permission`, `question`, `plan`, `waiting` and `done` all
+do, which is the same set the glyphs mark as needing you.
+
+An agent outside tmux alerts every attached terminal, since there is no pane of its own for
+one of them to be sitting on.
+
+This costs the hot path one extra read of a 45-byte file, to see what the previous state
+was. The tmux calls that render the toast only happen on a transition that alerts, which is
+once or twice a turn.
+
 ### Commands
 
 ```bash
