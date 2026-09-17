@@ -34,7 +34,7 @@ Usage:
   agent-state hook <state> [pane]  hook entry: records the state, and the directory
                                    the agent reports it is working in
   agent-state clear [pane]         drop a pane's state
-  agent-state ack [pane]           drop it only if the agent had finished
+  agent-state ack [pane]           return it to idle, only if the agent had finished
   agent-state status [session]     server-wide roll-up for the status line, with
                                    agents in the named session coloured as "here"
   agent-state list                 one row per agent pane, for fzf
@@ -51,7 +51,8 @@ States, most urgent first:
   waiting    ✋  the agent is blocked on you for some other reason
   done       ✅  the agent finished its turn, so it is your move
   working    ⏳  the agent is busy
-  idle       💤  inferred, not stamped: an agent process with no state recorded
+  idle       💤  the agent is up with nothing to report, either because it has
+                 only just booted or because you acknowledged the turn it finished
 
 Every command is safe to run outside tmux and safe to run against a pane that
 has already closed, so a hook can call it without ever failing the agent.
@@ -441,11 +442,24 @@ preview() {  # preview <pane>
         | tail -n "$height"
 }
 
+state_file_for_pane() {  # state_file_for_pane <pane>
+    local file recorded
+    [[ -n "${1:-}" ]] || return 1
+    for file in "$STATE_DIR"/*; do
+        [[ -f "$file" && "${file##*/}" =~ ^[0-9]+$ ]] || continue
+        { read -r _; read -r recorded; } < "$file" 2>/dev/null
+        [[ "$recorded" == "$1" ]] && { printf '%s' "$file"; return 0; }
+    done
+    return 1
+}
+
 acknowledge_if_finished() {  # acknowledge_if_finished [pane]
-    local pane="${1:-${TMUX_PANE:-}}"
+    local pane="${1:-${TMUX_PANE:-}}" file state recorded dir
     [[ -n "$pane" ]] || return 0
-    have_tmux || return 0
-    [[ "$(tmux display-message -p -t "$pane" "#{${PANE_OPT}}" 2>/dev/null)" == "done" ]] || return 0
+    file="$(state_file_for_pane "$pane")" || return 0
+    { read -r state; read -r recorded; read -r dir; } < "$file" 2>/dev/null
+    [[ "$state" == "done" ]] || return 0
+    printf '%s\n%s\n%s\n' idle "$recorded" "$dir" > "$file" 2>/dev/null
     clear_state "$pane"
 }
 

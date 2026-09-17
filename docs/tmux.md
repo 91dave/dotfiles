@@ -62,7 +62,7 @@ continue without you.
 | `waiting` | ✋ | Blocked on you for some other reason, such as an MCP dialog |
 | `done` | ✅ | The turn is over, so it is your move |
 | `working` | ⏳ | The agent is busy |
-| `idle` | 💤 | An agent process with no state recorded, such as a `pi` pane |
+| `idle` | 💤 | Up with nothing to report: freshly booted, or a finished turn you acknowledged |
 
 The glyph carries the state, so colour is free to carry location instead. See
 **Status bar** below.
@@ -285,13 +285,39 @@ windows.
 
 ### Acknowledging
 
-Landing on a finished agent is the acknowledgement, so its `done` state is dropped and the
-green ✅ disappears. A blocked agent keeps its state until the agent itself moves on,
-because arriving at the pane is not the same as answering the question.
+Landing on a finished agent is the acknowledgement, so it drops back to `idle` and the
+green ✅ becomes 💤. A blocked agent keeps its state until the agent itself moves on,
+because arriving at the pane is not the same as answering the question. Only `done` is
+acknowledged this way.
 
-This is wired to the `after-select-pane` hook, so it works however you got there, not just
-via the picker. Note that `pane-focus-in` does **not** fire without an attached client,
-which is why `after-select-pane` is used instead.
+It goes back to `idle` rather than being deleted. Deleting the state file would take the
+agent out of the roster entirely, and a finished agent you have read is still an agent
+worth seeing.
+
+Acknowledging rewrites the **state file**, and unsets the pane option as well so the window
+tab loses its colour. Doing only the latter is a silent no-op: nothing reads `@agent` except
+the tab formats.
+
+Arriving at a pane takes four different routes, and each fires its own tmux hook:
+
+| Getting there | Hook |
+|---------------|------|
+| Selecting a pane, including with the mouse and via the picker | `after-select-pane` |
+| Switching window | `after-select-window` |
+| Switching session, and attaching | `pane-focus-in`, `client-session-changed` |
+
+All four are wired to `agent-state ack #{pane_id}`, which resolves to the pane you have
+landed on in every case. Acknowledging is idempotent, so the overlap between the last two
+costs nothing.
+
+`pane-focus-in` does not fire without an attached client, which is why it cannot be the
+only hook. With a client attached it fires on every session switch, and needs no
+`focus-events` setting to do it.
+
+One case is deliberately left alone: an agent that finishes in the pane you are **already**
+sitting in. No focus hook fires, because focus never changed, so its ✅ stands until you
+leave and come back. Clearing it would mean treating "attached to that session" as "looking
+at the screen", which is not the same thing.
 
 ### Commands
 
@@ -300,6 +326,7 @@ agent-state status cc-foo   # roll-up, colouring session cc-foo as "here"
 agent-state list            # one row per agent pane, most urgent first
 agent-state pick            # fzf picker (aliased to `agents`)
 agent-state set plan %12    # stamp a pane by hand
+agent-state ack %12         # acknowledge it, if it had finished
 agent-state clear %12       # drop a pane's state
 agent-state --help
 ```

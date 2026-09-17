@@ -50,6 +50,15 @@ contains() {  # contains <name> <needle> <haystack>
 
 pane_opt() { tmux display-message -p -t "$1" "#{$2}"; }
 
+state_line() {  # state_line <line number> <pane>
+    local file
+    for file in "$STATE_ROOT"/*; do
+        [[ -f "$file" && "${file##*/}" =~ ^[0-9]+$ ]] || continue
+        [[ "$(sed -n 2p "$file")" == "$2" ]] && { sed -n "${1}p" "$file"; return 0; }
+    done
+    return 0
+}
+
 discard_inherited_shell_titles() {
     local pane
     while IFS= read -r pane; do
@@ -291,10 +300,11 @@ new_agent_session iota
 new_agent_session kappa
 I=$(tmux list-panes -t iota -F '#{pane_id}' | head -1)
 K=$(tmux list-panes -t kappa -F '#{pane_id}' | head -1)
-"$SUT" set done "$I"
-"$SUT" set waiting "$K"
+hook_in finished done "$I"
+hook_in blocked waiting "$K"
 "$SUT" jump "$I" >/dev/null 2>&1
 check "acknowledges a finished agent" "" "$(pane_opt "$I" @agent)"
+check "returning it to idle, not dropping it" "idle" "$(state_line 1 "$I")"
 "$SUT" jump "$K" >/dev/null 2>&1
 check "leaves a blocked agent blocked" "waiting" "$(pane_opt "$K" @agent)"
 
@@ -709,13 +719,37 @@ reset_server
 new_agent_session lambda 2
 L1=$(tmux list-panes -t lambda -F '#{pane_id}' | sed -n 1p)
 L2=$(tmux list-panes -t lambda -F '#{pane_id}' | sed -n 2p)
-"$SUT" set done "$L1"
-"$SUT" set waiting "$L2"
+hook_in finished done "$L1"
+hook_in blocked waiting "$L2"
+
 "$SUT" ack "$L1"
-check "drops a finished state" "" "$(pane_opt "$L1" @agent)"
+check "drops a finished state from the pane" "" "$(pane_opt "$L1" @agent)"
+check "returns a finished agent to idle" "idle" "$(state_line 1 "$L1")"
+check "keeps its pane, so it stays reachable" "$L1" "$(state_line 2 "$L1")"
+check "keeps its directory, so it stays labelled" "$WORK_ROOT/finished" "$(state_line 3 "$L1")"
+contains "the roll-up stops asking for attention" "💤 finished" "$("$SUT" status)"
+
 "$SUT" ack "$L2"
 check "leaves every other state alone" "waiting" "$(pane_opt "$L2" @agent)"
+check "a blocked agent stays blocked in its state file" "waiting" "$(state_line 1 "$L2")"
 check "restamps the window after acknowledging" "waiting" "$(pane_opt lambda:0 @agent_win)"
+
+hook_in finished working "$L1"
+"$SUT" ack "$L1"
+check "leaves a working agent working" "working" "$(state_line 1 "$L1")"
+
+echo
+echo "focus hooks"
+
+TMUXCONF="$SELF_DIR/../tmux.conf"
+
+acknowledges_on() {  # acknowledges_on <tmux hook>
+    rg -c "set-hook -ga $1 .*agent-state ack" "$TMUXCONF" 2>/dev/null || echo 0
+}
+
+for focus_hook in after-select-pane after-select-window pane-focus-in client-session-changed; do
+    check "arriving via $focus_hook acknowledges" "1" "$(acknowledges_on "$focus_hook")"
+done
 
 echo
 echo "hook safety"
