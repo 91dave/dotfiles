@@ -641,34 +641,32 @@ check "the status bar does not double-count it" "1" \
     "$("$SUT" status | rg -o 'grouped-proj' | wc -l)"
 
 echo
-echo "jumping into a session someone is already viewing"
+echo "jumping into a session another terminal is attached to"
 
 reset_server
 new_agent_session shared-a
 SP=$(tmux list-panes -t shared-a -F '#{pane_id}' | head -1)
 
 TMUX=fake "$SUT" jump "$SP" >/dev/null 2>&1
-check "with nobody viewing it, no extra session is made" "0" \
+check "with nobody on it, no extra session is made" "0" \
     "$(tmux list-sessions -F '#{session_name}' | rg -c 'shared-a-view' || echo 0)"
 
 script -qc "$(command -v tmux) -L $SOCKET attach -t shared-a" /dev/null >/dev/null 2>&1 &
 VIEWER=$!
 sleep 2
-TMUX=fake "$SUT" jump "$SP" >/dev/null 2>&1
-check "with someone viewing it, a grouped view session is made" "1" \
-    "$(tmux list-sessions -F '#{session_name}' | rg -c 'shared-a-view' || echo 0)"
-check "the view session shares the original's windows" "shared-a" \
-    "$(tmux list-sessions -f '#{==:#{session_name},shared-a-view}' -F '#{session_group}')"
+check "the other terminal starts out attached" "1" \
+    "$(tmux list-clients -t shared-a -F x | wc -l)"
 
 TMUX=fake "$SUT" jump "$SP" >/dev/null 2>&1
-check "a second jump reuses that view rather than stacking up" "1" \
+sleep 1
+check "jumping detaches it rather than opening a view" "0" \
+    "$(tmux list-clients -t shared-a -F x | wc -l)"
+check "no view session is made either" "0" \
     "$(tmux list-sessions -F '#{session_name}' | rg -c 'shared-a-view' || echo 0)"
+check "the session itself survives being taken over" "1" \
+    "$(tmux list-sessions -F '#{session_name}' | rg -c '^shared-a$' || echo 0)"
 kill "$VIEWER" 2>/dev/null
 sleep 1
-
-TMUX=fake "$SUT" jump "$SP" >/dev/null 2>&1
-check "a view nobody is attached to is cleaned up" "0" \
-    "$(tmux list-sessions -F '#{session_name}' | rg -c 'shared-a-view' || echo 0)"
 
 echo
 echo "hook configuration"

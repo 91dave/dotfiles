@@ -4,6 +4,17 @@ set -uo pipefail
 
 SELF="$(command -v tmux-sessions 2>/dev/null || realpath "$0")"
 
+INCLUDE_VIEWS=""
+POSITIONAL=()
+for arg in "$@"; do
+    if [[ "$arg" == "--include-views" ]]; then
+        INCLUDE_VIEWS=1
+    else
+        POSITIONAL+=("$arg")
+    fi
+done
+set -- ${POSITIONAL[@]+"${POSITIONAL[@]}"}
+
 die() { echo "tmux-sessions: $*" >&2; exit 1; }
 
 need() {
@@ -17,19 +28,32 @@ usage() {
 tmux-sessions: fuzzy-find and attach to a tmux session
 
 Lists live tmux sessions most recently active first, previews each one's windows
-and the visible contents of its active pane, and attaches to the selection.
+and the visible contents of every pane in its active window, and attaches to the
+selection.
 Inside tmux the client switches session instead of nesting.
+
+A session is only ever shown on one terminal, so attaching to one that another
+client is already on detaches that client first. Picking the session you are
+already in does nothing but close the picker.
+
+Views of another session (a grouped session sharing its windows, such as
+cc-qtms-publication-view) are hidden while their original is alive, since
+listing both is the same windows twice. Nothing creates them any more, so any
+you see are left over; --include-views lists them so they can be killed. The
+session you are in is always listed, view or not.
 
 Usage:
   tmux-sessions                 # interactive picker (fzf)
   tmux-sessions --list          # print the session list (non-interactive)
+  tmux-sessions --include-views # also list views of a live session
   tmux-sessions --preview <name>   # render one session's preview
   tmux-sessions --help
 
 Keys (interactive):
   enter        attach to (or switch to) the session
   alt-d        kill the session
-  ● in a row   the session has a client attached
+  ● in a row   the session you are in
+  ○ in a row   attached on another terminal, which enter will detach
 
 Environment:
   TMUX_SESSIONS_DRYRUN    if set, print the attach command instead of running it
@@ -38,17 +62,69 @@ Suggested alias:  alias ts=tmux-sessions
 EOF
 }
 
+current_session() {
+    [[ -n "${TMUX:-}" ]] || return 0
+    tmux display-message -p -t "\$${TMUX##*,}" '#{session_name}' 2>/dev/null
+}
+
+is_view_of_a_live_session() {  # is_view_of_a_live_session <name> <group> <originals>
+    [[ -n "$2" && "$1" != "$2" ]] || return 1
+    [[ $'\n'"$3"$'\n' == *$'\n'"$2"$'\n'* ]]
+}
+
 build_list() {
     need tmux
-    local activity name windows attached path date mark display
-    tmux list-sessions -F '#{session_activity}	#{session_name}	#{session_windows}	#{?session_attached,●, }	#{pane_current_path}' \
-        2>/dev/null | sort -rn | \
-    while IFS=$'\t' read -r activity name windows mark path; do
+    local sessions originals here activity name windows path attached group date mark display
+    sessions="$(tmux list-sessions -F '#{session_activity}	#{session_name}	#{session_windows}	#{session_attached}	#{pane_current_path}	#{session_group}' \
+        2>/dev/null | sort -rn)"
+    originals="$(awk -F'\t' '$2 == $6 { print $6 }' <<<"$sessions")"
+    here="$(current_session)"
+
+    while IFS=$'\t' read -r activity name windows attached path group; do
         [[ -n "$name" ]] || continue
+        if [[ -z "$INCLUDE_VIEWS" && "$name" != "$here" ]] \
+            && is_view_of_a_live_session "$name" "$group" "$originals"; then
+            continue
+        fi
+        if [[ "$name" == "$here" ]]; then
+            mark='●'
+        elif (( attached )); then
+            mark='○'
+        else
+            mark=' '
+        fi
         printf -v date '%(%Y-%m-%d %H:%M)T' "$activity"
         printf -v display '%-16s %1s  %-28.28s  %2s win  %s' \
             "$date" "$mark" "$name" "$windows" "${path/#$HOME/~}"
         printf '%s\t%s\n' "$display" "$name"
+    done <<<"$sessions"
+}
+
+capture_tail() {  # capture_tail <target> <lines>
+    tmux capture-pane -ep -t "$1" 2>/dev/null \
+        | awk 'NF { for (; blank > 0; blank--) print ""; print; next } { blank++ }' \
+        | tail -n "$2"
+}
+
+render_active_window() {  # render_active_window <name> <lines>
+    local name="$1" budget="$2" panes pane share id index cmd active first=1
+    mapfile -t panes < <(tmux list-panes -t "=$name:" \
+        -F '#{pane_id}	#{pane_index}	#{pane_current_command}	#{?pane_active,*,}' 2>/dev/null)
+    (( ${#panes[@]} )) || return 0
+
+    if (( ${#panes[@]} == 1 )); then
+        capture_tail "=$name:" "$budget"
+        return 0
+    fi
+
+    share=$(( (budget - 2 * ${#panes[@]}) / ${#panes[@]} ))
+    (( share > 3 )) || share=3
+    for pane in "${panes[@]}"; do
+        IFS=$'\t' read -r id index cmd active <<<"$pane"
+        (( first )) || printf '\n'
+        first=0
+        printf '  %s: %s%s\n' "$index" "$cmd" "${active:+ *}"
+        capture_tail "$id" "$share"
     done
 }
 
@@ -72,7 +148,7 @@ render_preview() {  # render_preview <name>
         printf 'Windows\n'
         tmux list-windows -t "=$name" \
             -F '  #{window_index}: #{window_name}#{?window_active, *,}  (#{pane_current_command})'
-        printf '\nActive pane\n'
+        printf '\nActive window\n'
     )"
     printf '%s\n\n' "$header"
 
@@ -80,9 +156,7 @@ render_preview() {  # render_preview <name>
     height="${FZF_PREVIEW_LINES:-$(tput lines 2>/dev/null || echo 40)}"
     lines=$(( height - $(printf '%s\n' "$header" | wc -l) - 1 ))
     (( lines > 3 )) || lines=3
-    tmux capture-pane -ep -t "=$name:" 2>/dev/null \
-        | awk 'NF { for (; blank > 0; blank--) print ""; print; next } { blank++ }' \
-        | tail -n "$lines"
+    render_active_window "$name" "$lines"
 }
 
 kill_session() {  # kill_session <name>
@@ -94,7 +168,10 @@ kill_session() {  # kill_session <name>
 do_action() {  # do_action <name>
     local name="${1:-}"
     [[ -n "$name" ]] || return 0
-    local cmd
+    [[ "$name" == "$(current_session)" ]] && return 0
+
+    local takeover cmd
+    takeover=( tmux detach-client -s "=$name" )
     if [[ -n "${TMUX:-}" ]]; then
         cmd=( tmux switch-client -t "=$name" )
     else
@@ -102,10 +179,11 @@ do_action() {  # do_action <name>
     fi
 
     if [[ -n "${TMUX_SESSIONS_DRYRUN:-}" ]]; then
-        printf '%s\n' "${cmd[*]}"
+        printf '%s\n%s\n' "${takeover[*]}" "${cmd[*]}"
         return 0
     fi
     tmux has-session -t "=$name" 2>/dev/null || die "no such session: $name"
+    "${takeover[@]}" 2>/dev/null
     exec "${cmd[@]}"
 }
 
@@ -118,8 +196,8 @@ interactive() {
         --ansi --delimiter '\t' --with-nth 1 \
         --layout=reverse \
         --prompt 'tmux> ' \
-        --header 'enter: attach   •   alt-d: kill   •   ● = attached' \
-        --bind "alt-d:execute-silent($SELF --kill {2})+reload($SELF --list)" \
+        --header 'enter: attach   •   alt-d: kill   •   ● = here   ○ = attached elsewhere' \
+        --bind "alt-d:execute-silent($SELF --kill {2})+reload($SELF --list${INCLUDE_VIEWS:+ --include-views})" \
         --preview "$SELF --preview {2}" \
         --preview-window 'right,55%,nowrap' )"
     [[ -n "$out" ]] || exit 0

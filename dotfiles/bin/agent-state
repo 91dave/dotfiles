@@ -3,6 +3,8 @@
 set -uo pipefail
 
 SELF="$(command -v agent-state 2>/dev/null || realpath "$0")"
+SESSIONS="${SELF%/*}/tmux-sessions"
+[[ -x "$SESSIONS" ]] || SESSIONS="$(command -v tmux-sessions 2>/dev/null)"
 
 PANE_OPT="@agent"
 WINDOW_OPT="@agent_win"
@@ -37,7 +39,8 @@ Usage:
                                    agents in the named session coloured as "here"
   agent-state list                 one row per agent pane, for fzf
   agent-state preview <pane>       render one pane's recent output
-  agent-state jump <pane>          focus a pane, switching session if needed
+  agent-state jump <pane>          select a pane, then hand its session to
+                                   tmux-sessions --attach to arrive on
   agent-state pick                 fzf picker over every agent pane
   agent-state --help
 
@@ -453,31 +456,8 @@ explain_unreachable() {  # explain_unreachable <pane>
     return 0
 }
 
-session_is_being_viewed() {  # session_is_being_viewed <session>
-    (( $(tmux list-clients -t "=$1" -F x 2>/dev/null | wc -l) > 0 ))
-}
-
-discard_unwatched_views() {  # discard_unwatched_views <session>
-    local name
-    while IFS= read -r name; do
-        [[ -n "$name" ]] || continue
-        tmux kill-session -t "=$name" 2>/dev/null
-    done < <(tmux list-sessions \
-        -f "#{&&:#{==:#{session_group},$1},#{&&:#{!=:#{session_name},$1},#{==:#{session_attached},0}}}" \
-        -F '#{session_name}' 2>/dev/null)
-    return 0
-}
-
-grouped_view_of() {  # grouped_view_of <session>
-    local session="$1" view="$1-view"
-    tmux has-session -t "=$view" 2>/dev/null \
-        || tmux new-session -d -t "=$session" -s "$view" 2>/dev/null \
-        || { printf '%s' "$session"; return 0; }
-    printf '%s' "$view"
-}
-
 jump() {  # jump <pane>
-    local pane="${1:-}" session target
+    local pane="${1:-}" session
     [[ -n "$pane" ]] || return 0
     have_tmux || return 0
     [[ "$pane" == !* ]] && { explain_unreachable "$pane"; return 0; }
@@ -487,22 +467,11 @@ jump() {  # jump <pane>
     session="$(tmux display-message -p -t "$pane" \
         '#{?session_group,#{session_group},#{session_name}}' 2>/dev/null)"
     [[ -n "$session" ]] || return 0
-    discard_unwatched_views "$session"
 
-    if session_is_being_viewed "$session"; then
-        target="$(grouped_view_of "$session")"
-    else
-        target="$session"
-    fi
-
-    if [[ -n "${TMUX:-}" ]]; then
-        tmux switch-client -t "=$target" 2>/dev/null
-    else
-        tmux attach-session -t "=$target" 2>/dev/null
-    fi
     tmux select-window -t "$pane" 2>/dev/null
     tmux select-pane -t "$pane" 2>/dev/null
-    return 0
+    [[ -x "$SESSIONS" ]] || die "required tool not found: tmux-sessions"
+    "$SESSIONS" --attach "$session"
 }
 
 pick() {

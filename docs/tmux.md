@@ -12,6 +12,7 @@ by `install.sh`. Prefix is `Ctrl+w`, not the default `Ctrl+b`.
 | `prefix r` | Rotate windows |
 | `prefix t` | Scratch terminal in a popup |
 | `prefix a` | Agent picker: jump to any AI agent pane in any session |
+| `prefix s` | Session picker: `tmux-sessions` in a popup, replacing the built-in `choose-tree` |
 
 ## Session helpers
 
@@ -19,12 +20,22 @@ Three fzf pickers, all with previews:
 
 | Command | Alias | Lists |
 |---------|-------|-------|
-| `tmux-sessions` | `ts` | Live tmux sessions, previewing the active pane |
+| `tmux-sessions` | `ts` | Live tmux sessions, previewing the active window |
 | `claude-sessions` | `cs` | Past Claude Code transcripts, to resume or fork |
 | `agent-state pick` | `agents` | Agent panes across every session, by state |
 
 `cc` and `pca` launch Claude Code and pi in a dedicated session named after the current
 folder (`cc-dotfiles`, `pi-dotfiles`), picking the next free name if one is taken.
+
+`tmux-sessions` previews the whole active window, not just its active pane: one labelled
+block per pane, `*` marking the active one, the visible lines split evenly between them. A
+window with a single pane is shown unlabelled, since the label would say nothing the
+window list above it does not.
+
+`tmux-sessions` marks the session you are in with `●` and one attached on another terminal
+with `○`. The distinction matters because the two do opposite things: enter on `●` only
+closes the picker, while enter on `○` detaches that other terminal (see *One terminal per
+session*). It hides views of a live session unless given `--include-views`.
 
 `claude-sessions` hides sessions that never got a turn, so a window opened only to run
 `/login` or `/clear` never reaches the picker. A session counts as having a turn once it
@@ -233,6 +244,44 @@ deliberately rather than glanced at.
 **Picker** on `prefix a` (or `agents` in a shell), sorted most urgent first, with a live
 `capture-pane` preview so you can read what an agent is asking before jumping. Enter
 switches session, window and pane in one go.
+
+The agent picker is the session picker with a pane on the end of it, so it does not own any
+switching logic. `agent-state jump` selects the window and pane, then hands the session to
+`tmux-sessions --attach`, which decides between a no-op, a takeover and a plain attach. An
+agent already in the session you are sitting in therefore costs nothing but the two selects.
+
+Selecting before attaching, rather than after, is what makes that delegation possible: both
+commands work on a session with no client, so the session is already sitting on the right
+pane when you arrive. Doing it the other way round meant `tmux-sessions` could never be
+handed the attach, since it `exec`s, and outside tmux `attach-session` blocks until you
+detach, so the selects landed after you had gone.
+
+### One terminal per session
+
+A session is only ever on one terminal. Arriving at one that another client holds detaches
+that client first, so both pickers take the session over rather than sharing it. Nothing is
+killed: the session, its windows and everything running in them are untouched, and the
+other terminal drops back to whatever it was before it attached.
+
+The alternative was a *view*: a grouped session (`tmux new-session -t cc-foo -s
+cc-foo-view`) sharing the original's windows, so two clients could sit on the same session
+with their own current window each. That is only worth having if you deliberately run two
+terminals on one session, which this setup never does. It cost a filter in the picker to
+hide the views, cleanup to stop them accumulating, and a whole class of bug where a jump
+inside the current session saw its own client attached and stranded you in a view of the
+session you were already in.
+
+Taking over also fixes the usual reason a session looks busy: a stale client from a
+terminal closed without tmux noticing. A view worked around that by spawning a second
+session; detaching clears it. And with `window-size latest` (the default), two live clients
+of different sizes on one session keep resizing its windows out from under each other.
+
+Views are no longer created, but leftovers from before still exist on a long-lived server.
+`tmux-sessions` hides a view while its original is alive, since listing both is the same
+windows twice. `--include-views` lists them so `alt-d` can clear them out. Two sessions are
+always listed whatever the flag says: the one you are in, so the `●` never goes missing,
+and a view whose original has been killed, since it is the only way left to reach those
+windows.
 
 ### Acknowledging
 
