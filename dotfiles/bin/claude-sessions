@@ -1,32 +1,4 @@
 #!/bin/bash
-# claude-sessions: fuzzy-find and resume a past Claude Code session from any project
-#
-# Lists recent sessions across every project folder, previews each, and on
-# selection jumps to the session's original directory and resumes (or forks) it.
-#
-# Usage:
-#   claude-sessions                 # interactive picker (fzf)
-#   claude-sessions --list          # print the session list (non-interactive)
-#   claude-sessions --preview <id> <cwd>   # render one session's preview
-#   claude-sessions --help
-#
-# Keys (interactive):
-#   enter        run the default action
-#   alt-enter    run the other action
-#   alt-e        end a live session (remove its live marker)
-#   alt-d        delete a session from the picker (adds it to the blocklist)
-#   ● in a row   the session is currently live (open in another process)
-#
-# Environment:
-#   CLAUDE_SESSIONS_DEFAULT   resume (default) | fork  -- which action enter runs
-#   CLAUDE_SESSIONS_DRYRUN    if set, print the resume command instead of running it
-#   CLAUDE_CONFIG_DIR         override the Claude config dir (default ~/.claude)
-#
-# Files:
-#   blocklist    ${XDG_DATA_HOME:-~/.local/share}/claude-sessions/blocklist
-#                one session id per line; edit or delete it to un-hide sessions.
-#
-# Suggested alias:  alias cs=claude-sessions
 
 set -uo pipefail
 
@@ -35,6 +7,11 @@ PROJECTS_DIR="$CLAUDE_DIR/projects"
 SESSIONS_DIR="$CLAUDE_DIR/sessions"
 BLOCKLIST="${XDG_DATA_HOME:-$HOME/.local/share}/claude-sessions/blocklist"
 SELF="$(command -v claude-sessions 2>/dev/null || realpath "$0")"
+
+AGENT_STATE="${SELF%/*}/agent-state"
+[[ -x "$AGENT_STATE" ]] || AGENT_STATE="$(command -v agent-state 2>/dev/null)"
+TMUX_SESSIONS="${SELF%/*}/tmux-sessions"
+[[ -x "$TMUX_SESSIONS" ]] || TMUX_SESSIONS="$(command -v tmux-sessions 2>/dev/null)"
 
 die() { echo "claude-sessions: $*" >&2; exit 1; }
 
@@ -249,11 +226,63 @@ do_action() {  # do_action <key> <id> <cwd>
     exec "${cmd[@]}"
 }
 
-interactive() {
+live_pane() {  # live_pane <id>  -- the pane its marker says it is running in, if any
+    local target
+    target="$(jq -r --arg id "$1" 'select(.sessionId == $id) | .tmux // empty' \
+        "$SESSIONS_DIR"/*.json 2>/dev/null | head -1)"
+    [[ -n "$target" ]] || return 1
+    printf '%s' "${target##*.}"
+}
+
+pane_is_alive() {  # pane_is_alive <pane>
+    [[ -n "$(tmux display-message -p -t "$1" '#{pane_id}' 2>/dev/null)" ]]
+}
+
+attach_to_pane() {  # attach_to_pane <pane>
+    [[ -n "$AGENT_STATE" ]] || die "required tool not found: agent-state"
+    if [[ -n "${CLAUDE_SESSIONS_DRYRUN:-}" ]]; then
+        printf 'agent-state jump %s\n' "$1"
+        return 0
+    fi
+    exec "$AGENT_STATE" jump "$1"
+}
+
+resume_in_own_session() {  # resume_in_own_session <id> <cwd> <action>
+    local name cmd
+    [[ -d "$2" ]] || die "directory no longer exists: $2"
+    [[ -n "$TMUX_SESSIONS" ]] || die "required tool not found: tmux-sessions"
+    name="$(free_session_name "cc-${2##*/}")"
+    cmd=( claude --resume "$1" )
+    [[ "$3" == "fork" ]] && cmd+=( --fork-session )
+
+    if [[ -n "${CLAUDE_SESSIONS_DRYRUN:-}" ]]; then
+        printf 'tmux new-session -d -s %s -c %s %s\n' "$name" "$2" "${cmd[*]}"
+        printf 'tmux-sessions --attach %s\n' "$name"
+        return 0
+    fi
+    tmux new-session -d -s "$name" -c "$2" "${cmd[@]}" \
+        || die "could not start a tmux session in $2"
+    exec "$TMUX_SESSIONS" --attach "$name"
+}
+
+do_jump_action() {  # do_jump_action <key> <id> <cwd>
+    need tmux
+    local action pane
+    action="$(resolve_action "$1")"
+    pane="$(live_pane "$2")"
+    if [[ "$action" == "resume" && -n "$pane" ]] && pane_is_alive "$pane"; then
+        attach_to_pane "$pane"
+        return 0
+    fi
+    resume_in_own_session "$2" "$3" "$action"
+}
+
+interactive() {  # interactive [jump]
     need fzf jq rg
-    local default other header out key line id cwd
+    local mode="${1:-}" default other header out key line id cwd
     default="${CLAUDE_SESSIONS_DEFAULT:-resume}"
     [[ "$default" == "fork" ]] && other="resume" || other="fork"
+    [[ "$mode" == "jump" && "$default" == "resume" ]] && default="attach or resume"
     header="enter: $default   •   alt-enter: $other   •   alt-e: end   •   alt-d: delete   •   ● = live"
 
     out="$(build_list | fzf \
@@ -272,17 +301,59 @@ interactive() {
     [[ -n "$line" ]] || exit 0
     id="$(cut -f2 <<<"$line")"
     cwd="$(cut -f3 <<<"$line")"
-    do_action "$key" "$id" "$cwd"
+    if [[ "$mode" == "jump" ]]; then
+        do_jump_action "$key" "$id" "$cwd"
+    else
+        do_action "$key" "$id" "$cwd"
+    fi
 }
 
 usage() {
-    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+    cat <<'EOF'
+claude-sessions: fuzzy-find and resume a past Claude Code session from any project
+
+Lists recent sessions across every project folder, previews each, and on
+selection jumps to the session's original directory and resumes (or forks) it.
+
+Usage:
+  claude-sessions                 # interactive picker (fzf)
+  claude-sessions --jump          # picker that leaves you in the session's own tmux session
+  claude-sessions --list          # print the session list (non-interactive)
+  claude-sessions --preview <id> <cwd>   # render one session's preview
+  claude-sessions --help
+
+Keys (interactive):
+  enter        run the default action
+  alt-enter    run the other action
+  alt-e        end a live session (remove its live marker)
+  alt-d        delete a session from the picker (adds it to the blocklist)
+  ● in a row   the session is currently live (open in another process)
+
+--jump is what the tmux binding on prefix Ctrl+a runs. A session still running in
+a tmux pane is attached to where it already is, rather than resumed a second time.
+Any other session is resumed in a tmux session of its own, named after its folder,
+which you then land in. Either way you leave the session you were in, so the
+picker behaves like the agent picker on prefix a.
+
+Environment:
+  CLAUDE_SESSIONS_DEFAULT   resume (default) | fork  -- which action enter runs
+  CLAUDE_SESSIONS_DRYRUN    if set, print the commands instead of running them
+  CLAUDE_CONFIG_DIR         override the Claude config dir (default ~/.claude)
+
+Files:
+  blocklist    ${XDG_DATA_HOME:-~/.local/share}/claude-sessions/blocklist
+               one session id per line; edit or delete it to un-hide sessions.
+
+Suggested alias:  alias cs=claude-sessions
+EOF
 }
 
 case "${1:-}" in
+    --jump)        interactive jump ;;
     --list)        build_list ;;
     --preview)     render_preview "${2:-}" "${3:-}" ;;
     --action)      do_action "${2:-}" "${3:-}" "${4:-}" ;;  # internal: test/hook entry
+    --jump-action) do_jump_action "${2:-}" "${3:-}" "${4:-}" ;;  # internal: test entry
     --end)         end_session "${2:-}" ;;                   # internal: fzf bind
     --block)       block_session "${2:-}" ;;                 # internal: fzf bind
     --has-turns)   need jq rg; has_turns "${2:-}" ;;         # internal: test entry

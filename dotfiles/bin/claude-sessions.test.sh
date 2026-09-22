@@ -5,11 +5,13 @@ set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SUT="$SELF_DIR/claude-sessions"
 FIXTURES="$(mktemp -d)"
+SOCKET="claude-sessions-test-$$"
 
 PASS=0
 FAIL=0
 
 cleanup() {
+    command tmux -L "$SOCKET" kill-server 2>/dev/null
     rm -rf "$FIXTURES"
 }
 trap cleanup EXIT
@@ -21,6 +23,16 @@ check() {  # check <name> <expected> <actual>
     else
         FAIL=$((FAIL + 1))
         printf '  FAIL %s\n       expected: %q\n       actual:   %q\n' "$1" "$2" "$3"
+    fi
+}
+
+contains() {  # contains <name> <needle> <haystack>
+    if [[ "$3" == *"$2"* ]]; then
+        PASS=$((PASS + 1))
+        printf '  ok   %s\n' "$1"
+    else
+        FAIL=$((FAIL + 1))
+        printf '  FAIL %s\n       %q not found in: %q\n' "$1" "$2" "$3"
     fi
 }
 
@@ -132,6 +144,53 @@ rm -f "$CONFIG/sessions/live.json"
 printf '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}\n' \
     >> "$CONFIG/projects/-tmp-proj/$DEAD.jsonl"
 check "a session that gained a turn comes back" "1" "$(listing | wc -l)"
+
+echo "jump"
+
+SHIM="$FIXTURES/shim"
+mkdir -p "$SHIM"
+cat > "$SHIM/tmux" <<EOF
+#!/bin/bash
+exec $(command -v tmux) -L "$SOCKET" "\$@"
+EOF
+chmod +x "$SHIM/tmux"
+
+PROJ="$FIXTURES/proj"
+mkdir -p "$PROJ"
+
+live_marker() {  # live_marker <id> [tmux target]  -- the marker a running session writes
+    printf '{"sessionId":"%s","cwd":"%s"%s}\n' "$1" "$PROJ" \
+        "${2:+,\"tmux\":\"$2\"}" > "$CONFIG/sessions/live.json"
+}
+
+jumping() {  # jumping <key> <id>  -- what the picker would do, without doing it
+    env PATH="$SHIM:$PATH" CLAUDE_CONFIG_DIR="$CONFIG" CLAUDE_SESSIONS_DRYRUN=1 \
+        XDG_DATA_HOME="$FIXTURES/data" "$SUT" --jump-action "$1" "$2" "$PROJ" 2>&1
+}
+
+rm -f "$CONFIG/sessions/live.json"
+out="$(jumping enter "$DEAD")"
+contains "a session that is not running gets a fresh tmux session" \
+    "tmux new-session -d -s cc-proj -c $PROJ" "$out"
+contains "resumed in it" "claude --resume $DEAD" "$out"
+contains "and attached to" "tmux-sessions --attach cc-proj" "$out"
+
+env PATH="$SHIM:$PATH" tmux new-session -d -s cc-live 'sleep 600'
+PANE="$(env PATH="$SHIM:$PATH" tmux list-panes -t '=cc-live' -F '#{pane_id}' | head -1)"
+live_marker "$DEAD" "cc-live:@0.$PANE"
+check "a running session is jumped to in the pane it is running in" \
+    "agent-state jump $PANE" "$(jumping enter "$DEAD")"
+
+contains "forking a running session still opens a fresh one" "--fork-session" \
+    "$(jumping alt-enter "$DEAD")"
+
+live_marker "$DEAD" "cc-live:@0.%999"
+contains "a marker whose pane has gone falls back to resuming" \
+    "claude --resume $DEAD" "$(jumping enter "$DEAD")"
+
+live_marker "$DEAD"
+contains "so does one that was never in tmux" \
+    "claude --resume $DEAD" "$(jumping enter "$DEAD")"
 
 echo
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"

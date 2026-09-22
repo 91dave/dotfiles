@@ -12,6 +12,7 @@ by `install.sh`. Prefix is `Ctrl+w`, not the default `Ctrl+b`.
 | `prefix r` | Rotate windows |
 | `prefix t` | Scratch terminal in a popup |
 | `prefix a` | Agent picker: jump to any AI agent pane in any session |
+| `prefix Ctrl+a` | Claude session picker: attach to a running Claude session, or resume a past one in its own session |
 | `prefix s` | Session picker: `tmux-sessions` in a popup, replacing the built-in `choose-tree` |
 
 ## Session helpers
@@ -36,6 +37,29 @@ window list above it does not.
 with `○`. The distinction matters because the two do opposite things: enter on `●` only
 closes the picker, while enter on `○` detaches that other terminal (see *One terminal per
 session*). It hides views of a live session unless given `--include-views`.
+
+### Resuming from tmux
+
+`prefix Ctrl+a` runs `claude-sessions --jump`, the same list of past transcripts with the
+agent picker's arrival behaviour on the end of it. Where `cs` in a shell resumes in the
+pane you are sitting in, the binding always leaves you somewhere else:
+
+| The session picked | What happens |
+|--------------------|--------------|
+| Still running in a tmux pane | Its pane is selected and its session attached, exactly as `prefix a` does |
+| Anything else | It is resumed in a fresh session named after its folder (`cc-dotfiles`), which you land in |
+
+A running session is never resumed a second time, which is the whole point of the split: two
+Claude processes on one transcript is the failure this avoids, and the one already running is
+the one with the context. Liveness comes from the session marker Claude writes at
+`~/.claude/sessions/<pid>.json`, which records the pane as `cc-dotfiles:@1.%1`. The marker is
+only trusted as far as the pane: one left behind by a killed session, or written by an agent
+outside tmux, has no live pane to reach, so the resume path takes it.
+
+The attach itself is delegated, not reimplemented: `agent-state jump` selects the window and
+pane and hands the session to `tmux-sessions --attach`, so the takeover rules under *One
+terminal per session* apply unchanged, and a finished agent is acknowledged on arrival.
+`alt-enter` still forks, which always means a new session, since a fork is a new transcript.
 
 `claude-sessions` hides sessions that never got a turn, so a window opened only to run
 `/login` or `/clear` never reaches the picker. A session counts as having a turn once it
