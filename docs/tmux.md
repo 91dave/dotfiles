@@ -47,14 +47,17 @@ pane you are sitting in, the binding always leaves you somewhere else:
 | The session picked | What happens |
 |--------------------|--------------|
 | Still running in a tmux pane | Its pane is selected and its session attached, exactly as `prefix a` does |
+| Still running outside tmux | Refused with an error, since there is no pane to reach; fork it instead |
 | Anything else | It is resumed in a fresh session named after its folder (`cc-dotfiles`), which you land in |
 
-A running session is never resumed a second time, which is the whole point of the split: two
-Claude processes on one transcript is the failure this avoids, and the one already running is
-the one with the context. Liveness comes from the session marker Claude writes at
-`~/.claude/sessions/<pid>.json`, which records the pane as `cc-dotfiles:@1.%1`. The marker is
-only trusted as far as the pane: one left behind by a killed session, or written by an agent
-outside tmux, has no live pane to reach, so the resume path takes it.
+A running session is never resumed a second time, by `cs` or by the binding. Two Claude
+processes on one transcript is the failure this avoids, and the one already running is the one
+with the context. Liveness comes from the session marker Claude writes at
+`~/.claude/sessions/<pid>.json`, which records the pane as `cc-dotfiles:@1.%1`. A marker only
+counts while its pid is still running, so one left behind by a killed session is resumed as
+normal. Each marker is read on its own, because Claude rewrites them on every status change and
+a single half-written file read in one `jq` pass would hide every marker after it, making a
+running session look finished.
 
 The attach itself is delegated, not reimplemented: `agent-state jump` selects the window and
 pane and hands the session to `tmux-sessions --attach`, so the takeover rules under *One

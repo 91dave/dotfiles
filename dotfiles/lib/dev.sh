@@ -67,6 +67,13 @@ _cc_ensure_agents_bridge() {
 function cc() {
     _cc_ensure_agents_bridge
 
+    # A session that is already running is gone to, not opened a second time.
+    local running
+    if running="$(claude-sessions --resumes-running "$@" 2>/dev/null)"; then
+        claude-sessions --attach-running "$running"
+        return
+    fi
+
     # Already inside tmux: run Claude in the current pane. Spawning a new session
     # and switching to it would leave the session you're in detached.
     if [ -n "$TMUX" ]; then

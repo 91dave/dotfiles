@@ -21,10 +21,15 @@ need() {
     done
 }
 
-# The set of session ids that are currently live, newline-delimited.
-live_sessions() {
-    jq -r 'select(.sessionId) | [.sessionId, (.pid // empty)] | @tsv' \
-        "$SESSIONS_DIR"/*.json 2>/dev/null
+# One jq per marker, so a half-written file cannot hide the markers after it.
+live_sessions() {  # id, pid and tmux target of each session whose process is still running
+    local f id pid target
+    for f in "$SESSIONS_DIR"/*.json; do
+        IFS=$'\t' read -r id pid target < <(jq -r \
+            'select(.sessionId and .pid) | [.sessionId, .pid, (.tmux // "")] | @tsv' "$f" 2>/dev/null)
+        [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null || continue
+        printf '%s\t%s\t%s\n' "$id" "$pid" "$target"
+    done
 }
 
 live_ids() {
@@ -122,7 +127,7 @@ build_list() {
     local live; live="$(cut -f1 <<<"$markers" | sort -u)"
     declare -A CM CR BL LIVE_PID
     local lid lpid
-    while IFS=$'\t' read -r lid lpid; do
+    while IFS=$'\t' read -r lid lpid _; do
         [[ -n "$lid" ]] && LIVE_PID["$lid"]="$lpid"
     done <<<"$markers"
     if [[ -f "$cache" ]]; then
@@ -240,6 +245,10 @@ free_session_name() {  # free_session_name <base>  -- base, base-2, base-3, ...
 do_action() {  # do_action <key> <id> <cwd>
     local key="$1" id="$2" cwd="${3:-}"
     local action; action="$(resolve_action "$key")"
+    if [[ "$action" == "resume" ]] && is_running "$id"; then
+        attach_to_running "$id"
+        return
+    fi
     local cmd=( claude --resume "$id" )
     [[ "$action" == "fork" ]] && cmd+=( --fork-session )
 
@@ -258,8 +267,7 @@ do_action() {  # do_action <key> <id> <cwd>
 
 live_pane() {  # live_pane <id>  -- the pane its marker says it is running in, if any
     local target
-    target="$(jq -r --arg id "$1" 'select(.sessionId == $id) | .tmux // empty' \
-        "$SESSIONS_DIR"/*.json 2>/dev/null | head -1)"
+    target="$(live_sessions | awk -F'\t' -v id="$1" '$1 == id && $3 != "" { print $3; exit }')"
     [[ -n "$target" ]] || return 1
     printf '%s' "${target##*.}"
 }
@@ -295,14 +303,44 @@ resume_in_own_session() {  # resume_in_own_session <id> <cwd> <action>
     exec "$TMUX_SESSIONS" --attach "$name"
 }
 
+# A second process on a running session's transcript would split it, so go to the one running.
+attach_to_running() {  # attach_to_running <id>
+    local pane
+    pane="$(live_pane "$1")"
+    [[ -n "$pane" ]] && pane_is_alive "$pane" \
+        || die "session $1 is already running outside tmux; fork it instead of resuming it"
+    attach_to_pane "$pane"
+}
+
+is_running() {  # is_running <id>
+    is_live "$1" "$(live_ids)"
+}
+
+resumed_id() {  # resumed_id <claude args...>  -- the session they reopen in place, if any
+    local arg prev=""
+    for arg in "$@"; do
+        [[ "$arg" == --fork-session ]] && return 1
+    done
+    for arg in "$@"; do
+        [[ "$prev" == --resume || "$prev" == -r ]] && { printf '%s' "$arg"; return 0; }
+        [[ "$arg" == --resume=* ]] && { printf '%s' "${arg#--resume=}"; return 0; }
+        prev="$arg"
+    done
+    return 1
+}
+
+resumes_running() {  # resumes_running <claude args...>  -- the running session they would open a second time
+    local id
+    id="$(resumed_id "$@")" && is_running "$id" && printf '%s\n' "$id"
+}
+
 do_jump_action() {  # do_jump_action <key> <id> <cwd>
     need tmux
-    local action pane
+    local action
     action="$(resolve_action "$1")"
-    pane="$(live_pane "$2")"
-    if [[ "$action" == "resume" && -n "$pane" ]] && pane_is_alive "$pane"; then
-        attach_to_pane "$pane"
-        return 0
+    if [[ "$action" == "resume" ]] && is_running "$2"; then
+        attach_to_running "$2"
+        return
     fi
     resume_in_own_session "$2" "$3" "$action"
 }
@@ -312,7 +350,7 @@ interactive() {  # interactive [jump]
     local mode="${1:-}" default other header out key line id cwd
     default="${CLAUDE_SESSIONS_DEFAULT:-resume}"
     [[ "$default" == "fork" ]] && other="resume" || other="fork"
-    [[ "$mode" == "jump" && "$default" == "resume" ]] && default="attach or resume"
+    [[ "$default" == "resume" ]] && default="attach or resume"
     header="enter: $default   •   alt-enter: $other   •   alt-e: end   •   alt-d: delete   •   ● = live"
 
     out="$(build_list | fzf \
@@ -360,11 +398,14 @@ Keys (interactive):
   alt-d        delete a session from the picker (adds it to the blocklist)
   ● in a row   the session is currently live (open in another process)
 
---jump is what the tmux binding on prefix Ctrl+a runs. A session still running in
-a tmux pane is attached to where it already is, rather than resumed a second time.
-Any other session is resumed in a tmux session of its own, named after its folder,
-which you then land in. Either way you leave the session you were in, so the
-picker behaves like the agent picker on prefix a.
+A session that is still running is never resumed a second time: one in a tmux pane
+is attached to where it already is, and one running outside tmux is refused (fork
+it instead). A marker whose process has exited does not count as running.
+
+--jump is what the tmux binding on prefix Ctrl+a runs. It resumes any other session
+in a tmux session of its own, named after its folder, which you then land in.
+Either way you leave the session you were in, so the picker behaves like the agent
+picker on prefix a.
 
 Environment:
   CLAUDE_SESSIONS_DEFAULT   resume (default) | fork  -- which action enter runs
@@ -388,6 +429,8 @@ case "${1:-}" in
     --end)         end_session "${2:-}" ;;                   # internal: fzf bind
     --block)       block_session "${2:-}" ;;                 # internal: fzf bind
     --has-turns)   need jq rg; has_turns "${2:-}" ;;         # internal: test entry
+    --resumes-running) need jq; shift; resumes_running "$@" ;;  # internal: cc guard
+    --attach-running)  need jq tmux; attach_to_running "${2:-}" ;;  # internal: cc guard
     --help|-h)     usage ;;
     "")            interactive ;;
     *)             die "unknown option: $1 (try --help)" ;;
