@@ -39,6 +39,8 @@ Usage:
   agent-state status [session]     server-wide roll-up for the status line, with
                                    agents in the named session coloured as "here"
   agent-state list                 one row per agent pane, for fzf
+  agent-state pane <pid>           the state and tmux pane recorded for one agent,
+                                   by the pid its state file is keyed on
   agent-state preview <pane>       render one pane's recent output
   agent-state jump <pane>          select a pane, then hand its session to
                                    tmux-sessions --attach to arrive on
@@ -454,6 +456,16 @@ list() {
     done < <(sorted_rows)
 }
 
+pane_of() {  # pane_of <agent pid>
+    local state pane
+    [[ "${1:-}" =~ ^[0-9]+$ ]] || return 0
+    kill -0 "$1" 2>/dev/null || return 0
+    [[ -r "$STATE_DIR/$1" ]] || return 0
+    { read -r state; read -r pane; } < "$STATE_DIR/$1"
+    [[ -n "$pane" ]] || return 0
+    printf '%s\t%s\n' "$state" "$pane"
+}
+
 preview() {  # preview <pane>
     local pane="${1:-}" height
     [[ -n "$pane" ]] || return 0
@@ -544,6 +556,7 @@ case "${1:-}" in
     ack)       acknowledge_if_finished "${2:-}" ;;
     status)    shift; status "$@" ;;
     list)      list ;;
+    pane)      pane_of "${2:-}" ;;
     preview)   preview "${2:-}" ;;
     jump)      jump "${2:-}" ;;
     pick)      pick ;;

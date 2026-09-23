@@ -309,6 +309,18 @@ check "returning it to idle, not dropping it" "idle" "$(state_line 1 "$I")"
 check "leaves a blocked agent blocked" "waiting" "$(pane_opt "$K" @agent)"
 
 echo
+echo "pane"
+
+reset_server
+new_agent_session lambda
+L=$(tmux list-panes -t lambda -F '#{pane_id}' | head -1)
+LPID=$(tmux display-message -p -t "$L" '#{pane_pid}')
+hook_in lambda working "$L"
+check "an agent's state and pane are readable by pid" "working	$L" "$("$SUT" pane "$LPID")"
+check "a pid with no agent reads as nothing" "" "$("$SUT" pane 999999)"
+check "so does one that is not a pid at all" "" "$("$SUT" pane not-a-pid)"
+
+echo
 echo "agent directory"
 
 reset_server
