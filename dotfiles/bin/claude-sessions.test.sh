@@ -117,7 +117,16 @@ check "an empty transcript has no turns" "1" "$(turns_status "$f")"
 echo "listing"
 
 CONFIG="$FIXTURES/config"
-mkdir -p "$CONFIG/projects/-tmp-proj" "$CONFIG/sessions"
+SHIM="$FIXTURES/shim"
+STATE="$FIXTURES/agent-state"
+PROJ="$FIXTURES/proj"
+mkdir -p "$CONFIG/projects/-tmp-proj" "$CONFIG/sessions" "$SHIM" "$STATE" "$PROJ"
+
+cat > "$SHIM/tmux" <<EOF
+#!/bin/bash
+exec $(command -v tmux) -L "$SOCKET" "\$@"
+EOF
+chmod +x "$SHIM/tmux"
 
 transcript() {  # transcript <id>  -- a turn-less session under the isolated config
     cat > "$CONFIG/projects/-tmp-proj/$1.jsonl" <<EOF
@@ -128,8 +137,8 @@ EOF
 
 listing() {  # listing  -- rows the picker would show, cache discarded each time
     rm -rf "$FIXTURES/cache"
-    env CLAUDE_CONFIG_DIR="$CONFIG" XDG_CACHE_HOME="$FIXTURES/cache" \
-        XDG_DATA_HOME="$FIXTURES/data" "$SUT" --list 2>/dev/null
+    env PATH="$SHIM:$PATH" CLAUDE_CONFIG_DIR="$CONFIG" XDG_CACHE_HOME="$FIXTURES/cache" \
+        XDG_DATA_HOME="$FIXTURES/data" AGENT_STATE_DIR="$STATE" "$SUT" --list 2>/dev/null
 }
 
 DEAD=aaaaaaaa-0000-0000-0000-00000000dead
@@ -147,20 +156,10 @@ check "a session that gained a turn comes back" "1" "$(listing | wc -l)"
 
 echo "jump"
 
-SHIM="$FIXTURES/shim"
-mkdir -p "$SHIM"
-cat > "$SHIM/tmux" <<EOF
-#!/bin/bash
-exec $(command -v tmux) -L "$SOCKET" "\$@"
-EOF
-chmod +x "$SHIM/tmux"
-
-PROJ="$FIXTURES/proj"
-mkdir -p "$PROJ"
-
 live_marker() {  # live_marker <id> [tmux target]  -- the marker a running session writes
-    printf '{"sessionId":"%s","cwd":"%s"%s}\n' "$1" "$PROJ" \
-        "${2:+,\"tmux\":\"$2\"}" > "$CONFIG/sessions/live.json"
+    rm -f "$CONFIG/sessions"/*.json
+    printf '{"sessionId":"%s","pid":%d,"cwd":"%s"%s}\n' "$1" "$$" "$PROJ" \
+        "${2:+,\"tmux\":\"$2\"}" > "$CONFIG/sessions/$$.json"
 }
 
 jumping() {  # jumping <key> <id>  -- what the picker would do, without doing it
@@ -191,6 +190,53 @@ contains "a marker whose pane has gone falls back to resuming" \
 live_marker "$DEAD"
 contains "so does one that was never in tmux" \
     "claude --resume $DEAD" "$(jumping enter "$DEAD")"
+
+echo "live preview"
+
+lacks() {  # lacks <name> <needle> <haystack>
+    if [[ "$3" != *"$2"* ]]; then
+        PASS=$((PASS + 1))
+        printf '  ok   %s\n' "$1"
+    else
+        FAIL=$((FAIL + 1))
+        printf '  FAIL %s\n       %q unexpectedly found in: %q\n' "$1" "$2" "$3"
+    fi
+}
+
+agent_file() {  # agent_file <state> <pane>  -- what the agent's hooks record
+    printf '%s\n%s\n%s\n' "$1" "$2" "$PROJ" > "$STATE/$$"
+}
+
+previewing() {  # previewing [pane]
+    env PATH="$SHIM:$PATH" CLAUDE_CONFIG_DIR="$CONFIG" AGENT_STATE_DIR="$STATE" \
+        XDG_CACHE_HOME="$FIXTURES/cache" "$SUT" --preview "$DEAD" "$PROJ" "${1:-}" 2>&1
+}
+
+env PATH="$SHIM:$PATH" tmux new-session -d -s cc-preview 'echo SENTINEL-PANE; sleep 600'
+PPANE="$(env PATH="$SHIM:$PATH" tmux list-panes -t '=cc-preview' -F '#{pane_id}' | head -1)"
+
+out="$(previewing "$PPANE")"
+contains "a live pane is shown instead of the transcript" "SENTINEL-PANE" "$out"
+lacks "so the transcript sections are left out" "Opening prompt" "$out"
+
+contains "a session with no pane still reads from its transcript" "Opening prompt" \
+    "$(previewing)"
+contains "and so does one whose pane has gone" "Opening prompt" "$(previewing %999)"
+
+agent_file working "$PPANE"
+live_marker "$DEAD"
+check "a live session with an agent state file offers its pane to the picker" \
+    "$PPANE" "$(listing | cut -f4)"
+
+rm -f "$STATE/$$"
+check "one without an agent state file offers none" "" "$(listing | cut -f4)"
+
+agent_file working "%999"
+check "nor does one whose pane has gone" "" "$(listing | cut -f4)"
+
+agent_file working "$PPANE"
+rm -f "$CONFIG/sessions"/*.json
+check "nor does a session that is not running" "" "$(listing | cut -f4)"
 
 echo
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"

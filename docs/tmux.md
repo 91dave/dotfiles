@@ -61,6 +61,47 @@ pane and hands the session to `tmux-sessions --attach`, so the takeover rules un
 terminal per session* apply unchanged, and a finished agent is acknowledged on arrival.
 `alt-enter` still forks, which always means a new session, since a fork is a new transcript.
 
+### Previewing a running session
+
+A running session is previewed by `agent-state preview`, the live `capture-pane` the agent
+picker uses, in place of the transcript summary. You are choosing between sessions that are
+doing something right now, so what one is doing beats what it was started to do. A past
+session keeps the summary, since it has no pane to show.
+
+The pane reaches the picker through the list, not the preview: `build_list` resolves every
+live row to `<marker pid>` → `agent-state pane` → a pane that is still alive, and emits it as
+a fourth column. So the preview is handed the pane rather than finding it, and the row knows
+whether it is previewing a pane before the preview runs. Three conditions have to hold, and
+any one of them failing falls back to the transcript: a live marker, an agent-state file for
+that pid, and a pane that still exists. An agent running outside tmux therefore keeps the
+summary, which is the only thing it can show.
+
+Knowing at list time is what fixes wrapping. A pane capture is already hard-wrapped to its
+own pane's width, so soft-wrapping it again into a 55% preview breaks every line twice and
+the agent's UI with it. Prose has the opposite need: truncated at the edge, a long prompt
+loses its tail. fzf cannot set the preview window per row, but it can react to the row:
+
+```
+--bind 'focus:transform:[[ -n {4} ]] && echo change-preview-window:nowrap || echo change-preview-window:wrap'
+```
+
+A spec given to `change-preview-window` is applied over the original `--preview-window`, so
+`right,55%` survives and only the wrap flag moves.
+
+There is no header above the pane. Title, project and branch are on the highlighted row an
+inch to the left, and the agent's own status line repeats the folder and branch anyway. The
+header cost a `bat` render and a cache lookup to say what was already on screen twice.
+
+The preview is the one thing that runs on every keystroke, so it is worth the arithmetic:
+
+| | Per render |
+|---|---|
+| Transcript summary | ~90 ms, of which four `rg` passes over a transcript that grows all session |
+| Live pane | ~45 ms, flat: one `tmux` liveness check, then `exec` into `agent-state preview` |
+
+`exec` rather than a call, since nothing follows it. Two bash starts on `/mnt/c` are most of
+what is left. Resolving the pane costs the list build ~17 ms per live row, once per open.
+
 `claude-sessions` hides sessions that never got a turn, so a window opened only to run
 `/login` or `/clear` never reaches the picker. A session counts as having a turn once it
 holds an agent reply, or a prompt of your own beyond slash-command plumbing, so one
@@ -381,6 +422,7 @@ once or twice a turn.
 ```bash
 agent-state status cc-foo   # roll-up, colouring session cc-foo as "here"
 agent-state list            # one row per agent pane, most urgent first
+agent-state pane 80936      # the state and pane recorded for one agent pid
 agent-state pick            # fzf picker (aliased to `agents`)
 agent-state set plan %12    # stamp a pane by hand
 agent-state ack %12         # acknowledge it, if it had finished

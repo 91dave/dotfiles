@@ -22,12 +22,26 @@ need() {
 }
 
 # The set of session ids that are currently live, newline-delimited.
+live_sessions() {
+    jq -r 'select(.sessionId) | [.sessionId, (.pid // empty)] | @tsv' \
+        "$SESSIONS_DIR"/*.json 2>/dev/null
+}
+
 live_ids() {
-    jq -r '.sessionId // empty' "$SESSIONS_DIR"/*.json 2>/dev/null | sort -u
+    live_sessions | cut -f1 | sort -u
 }
 
 is_live() {  # is_live <id> <newline-delimited-live-set>
     [[ $'\n'$2$'\n' == *$'\n'$1$'\n'* ]]
+}
+
+agent_pane() {  # agent_pane <agent pid>  -- its pane, when one is recorded and still alive
+    local state pane
+    [[ -n "${1:-}" && -n "$AGENT_STATE" ]] || return 0
+    command -v tmux >/dev/null 2>&1 || return 0
+    IFS=$'\t' read -r state pane < <("$AGENT_STATE" pane "$1")
+    [[ -n "${pane:-}" ]] && pane_is_alive "$pane" && printf '%s' "$pane"
+    return 0
 }
 
 has_turns() {  # has_turns <transcript-path>  -- an agent reply, or a prompt of your own
@@ -104,8 +118,13 @@ build_list() {
     local cache="$cache_dir/cache.tsv"
     mkdir -p "$cache_dir" 2>/dev/null
 
-    local live; live="$(live_ids)"
-    declare -A CM CR BL
+    local markers; markers="$(live_sessions)"
+    local live; live="$(cut -f1 <<<"$markers" | sort -u)"
+    declare -A CM CR BL LIVE_PID
+    local lid lpid
+    while IFS=$'\t' read -r lid lpid; do
+        [[ -n "$lid" ]] && LIVE_PID["$lid"]="$lpid"
+    done <<<"$markers"
     if [[ -f "$cache" ]]; then
         local cm cid ccwd cbranch cproj ctitle cturns
         while IFS=$'\t' read -r cm cid ccwd cbranch cproj ctitle cturns; do
@@ -122,7 +141,7 @@ build_list() {
     fi
 
     local tmp; tmp="$(mktemp)"
-    local mtime path id fields cwd branch proj title turns date live_mark display
+    local mtime path id fields cwd branch proj title turns date live_mark pane display
     stat -c '%Y %n' "$PROJECTS_DIR"/*/*.jsonl 2>/dev/null | sort -rn | \
     while read -r mtime path; do
         [[ -s "$path" ]] || continue
@@ -138,10 +157,16 @@ build_list() {
         IFS=$'\t' read -r cwd branch proj title turns <<<"$fields"
         [[ "$turns" == 1 ]] || is_live "$id" "$live" || continue
         printf -v date '%(%Y-%m-%d %H:%M)T' "$mtime"
-        if is_live "$id" "$live"; then live_mark="●"; else live_mark=" "; fi
+        pane=""
+        if is_live "$id" "$live"; then
+            live_mark="●"
+            pane="$(agent_pane "${LIVE_PID[$id]:-}")"
+        else
+            live_mark=" "
+        fi
         printf -v display '%-16s %1s  %-60.60s  %-20.20s  %s' \
             "$date" "$live_mark" "$title" "$proj" "$branch"
-        printf '%s\t%s\t%s\n' "$display" "$id" "$cwd"
+        printf '%s\t%s\t%s\t%s\n' "$display" "$id" "$cwd" "$pane"
     done
     mv -f "$tmp" "$cache" 2>/dev/null || rm -f "$tmp"
 }
@@ -159,9 +184,14 @@ render_pager() {  # reads markdown on stdin, renders it for the preview pane
     fi
 }
 
-render_preview() {  # render_preview <id> <cwd>
+render_preview() {  # render_preview <id> <cwd> [live pane]
+    if [[ -n "${3:-}" && -n "$AGENT_STATE" ]] && pane_is_alive "$3"; then
+        exec "$AGENT_STATE" preview "$3"
+    fi
+
     need jq rg
     local id="$1" cwd="${2:-}"
+
     local matches=( "$PROJECTS_DIR"/*/"$id.jsonl" )
     local path="${matches[0]}"
     [[ -f "$path" ]] || { echo "No transcript found for $id"; return 0; }
@@ -293,7 +323,8 @@ interactive() {  # interactive [jump]
         --header "$header" \
         --bind "alt-e:execute-silent($SELF --end {2})+reload($SELF --list)" \
         --bind "alt-d:execute-silent($SELF --block {2})+reload($SELF --list)" \
-        --preview "$SELF --preview {2} {3}" \
+        --bind 'focus:transform:[[ -n {4} ]] && echo change-preview-window:nowrap || echo change-preview-window:wrap' \
+        --preview "$SELF --preview {2} {3} {4}" \
         --preview-window 'right,55%,wrap' )"
     [[ -n "$out" ]] || exit 0
     key="$(head -1 <<<"$out")"
@@ -351,7 +382,7 @@ EOF
 case "${1:-}" in
     --jump)        interactive jump ;;
     --list)        build_list ;;
-    --preview)     render_preview "${2:-}" "${3:-}" ;;
+    --preview)     render_preview "${2:-}" "${3:-}" "${4:-}" ;;
     --action)      do_action "${2:-}" "${3:-}" "${4:-}" ;;  # internal: test/hook entry
     --jump-action) do_jump_action "${2:-}" "${3:-}" "${4:-}" ;;  # internal: test entry
     --end)         end_session "${2:-}" ;;                   # internal: fzf bind
