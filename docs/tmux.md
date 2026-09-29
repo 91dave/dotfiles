@@ -14,14 +14,17 @@ by `install.sh`. Prefix is `Ctrl+w`, not the default `Ctrl+b`.
 | `prefix a` | Agent picker: jump to any AI agent pane in any session |
 | `prefix Ctrl+a` | Claude session picker: attach to a running Claude session, or resume a past one in its own session |
 | `prefix s` | Session picker: `tmux-sessions` in a popup, replacing the built-in `choose-tree` |
+| `prefix w` | Window picker: `tmux-windows` in a popup, for the current session only |
+| `prefix Ctrl+w` | The built-in `choose-tree -Zw` window picker. Replaces `send-prefix`, so a literal `Ctrl+w` can no longer be sent through |
 
 ## Session helpers
 
-Three fzf pickers, all with previews:
+Four fzf pickers, all with previews:
 
 | Command | Alias | Lists |
 |---------|-------|-------|
 | `tmux-sessions` | `ts` | Live tmux sessions, previewing the active window |
+| `tmux-windows` | `tw` | Windows in the current session, previewing each as laid out on screen |
 | `claude-sessions` | `cs` | Past Claude Code transcripts, to resume or fork |
 | `agent-state pick` | `agents` | Agent panes across every session, by state |
 
@@ -32,6 +35,12 @@ folder (`cc-dotfiles`, `pi-dotfiles`), picking the next free name if one is take
 block per pane, `*` marking the active one, the visible lines split evenly between them. A
 window with a single pane is shown unlabelled, since the label would say nothing the
 window list above it does not.
+
+`tmux-windows` gives the preview 80% of the popup and turns wrapping off, because it draws
+the whole window as it sits on screen: every pane at its own position, split by borders,
+trimmed to the bottom rows when the window is taller than the preview. Colours are kept, and
+characters are measured as tmux measures them (emoji and CJK two columns, variation selectors
+none) so a pane's right border stays straight. `●` marks the window you are on and `alt-d` kills one.
 
 `tmux-sessions` marks the session you are in with `●` and one attached on another terminal
 with `○`. The distinction matters because the two do opposite things: enter on `●` only

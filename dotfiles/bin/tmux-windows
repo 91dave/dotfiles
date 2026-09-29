@@ -1,0 +1,265 @@
+#!/bin/bash
+
+set -uo pipefail
+
+SELF="$(command -v tmux-windows 2>/dev/null || realpath "$0")"
+
+die() { echo "tmux-windows: $*" >&2; exit 1; }
+
+need() {
+    for c in "$@"; do
+        command -v "$c" >/dev/null 2>&1 || die "required tool not found: $c"
+    done
+}
+
+usage() {
+    cat <<'EOF'
+tmux-windows: fuzzy-find and select a window in the current tmux session
+
+Lists the windows of the session you are in, previews each one as it is laid
+out on screen (every pane in place, separated by borders), and selects the
+choice.
+
+Usage:
+  tmux-windows                    # interactive picker (fzf)
+  tmux-windows --list             # print the window list (non-interactive)
+  tmux-windows --preview <id>     # render one window's preview
+  tmux-windows --help
+
+Keys (interactive):
+  enter        select the window
+  alt-d        kill the window
+  ● in a row   the window you are on
+
+Environment:
+  TMUX_WINDOWS_DRYRUN    if set, print the select command instead of running it
+
+Suggested alias:  alias tw=tmux-windows
+EOF
+}
+
+current_session() {
+    [[ -n "${TMUX:-}" ]] || return 0
+    tmux display-message -p -t "\$${TMUX##*,}" '#{session_name}' 2>/dev/null
+}
+
+build_list() {
+    need tmux
+    local session id index name panes cmd path active mark display
+    session="$(current_session)"
+    [[ -n "$session" ]] || die "not inside a tmux session"
+
+    while IFS=$'\t' read -r id index name panes cmd path active; do
+        [[ -n "$id" ]] || continue
+        if (( active )); then mark='●'; else mark=' '; fi
+        printf -v display '%3s %1s  %-24.24s  %2s pane  %-10.10s  %s' \
+            "$index" "$mark" "$name" "$panes" "$cmd" "${path/#$HOME/~}"
+        printf '%s\t%s\n' "$display" "$id"
+    done < <(tmux list-windows -t "=$session:" \
+        -F '#{window_id}	#{window_index}	#{window_name}	#{window_panes}	#{pane_current_command}	#{pane_current_path}	#{window_active}' \
+        2>/dev/null)
+}
+
+capture_panes() {  # capture_panes <window-id>  -- a geometry line then the lines of each pane
+    local id left top width height
+    while IFS=$'\t' read -r id left top width height; do
+        printf '\x01%s %s %s %s\n' "$left" "$top" "$width" "$height"
+        tmux capture-pane -ep -t "$id" 2>/dev/null | head -n "$height"
+    done < <(tmux list-panes -t "$1" \
+        -F '#{pane_id}	#{pane_left}	#{pane_top}	#{pane_width}	#{pane_height}' 2>/dev/null)
+}
+
+# Code points tmux draws two columns wide, or zero (combining marks, joiners, variation selectors).
+WIDE_RANGES='1100-115F 231A-231B 2329-232A 23E9-23EC 23F0 23F3 25FD-25FE 2614-2615 2648-2653
+267F 2693 26A1 26AA-26AB 26BD-26BE 26C4-26C5 26CE 26D4 26EA 26F2-26F3 26F5 26FA 26FD 2705
+270A-270B 2728 274C 274E 2753-2755 2757 2795-2797 27B0 27BF 2B1B-2B1C 2B50 2B55 2E80-303E
+3041-33FF 3400-4DBF 4E00-9FFF A000-A4CF AC00-D7A3 F900-FAFF FE30-FE4F FF00-FF60 FFE0-FFE6
+1F004 1F0CF 1F18E 1F191-1F19A 1F200-1F251 1F300-1F64F 1F680-1F6FF 1F7E0-1F7EB 1F900-1F9FF
+1FA70-1FAFF 20000-3FFFD'
+ZERO_RANGES='0300-036F 1AB0-1AFF 1DC0-1DFF 200B-200F 20D0-20FF FE00-FE0F FE20-FE2F E0100-E01EF'
+
+compose_layout() {  # compose_layout <window-width> <window-height>  -- stdin from capture_panes
+    LC_ALL=C awk -v W="$1" -v H="$2" -v wide="$WIDE_RANGES" -v zero="$ZERO_RANGES" '
+        function ranges(spec, lo, hi,    n, parts, i, bounds) {
+            n = split(spec, parts, /[ \n]+/)
+            for (i = 1; i <= n; i++) {
+                split(parts[i], bounds, "-")
+                lo[i] = strtonum("0x" bounds[1])
+                hi[i] = strtonum("0x" (2 in bounds ? bounds[2] : bounds[1]))
+                delete bounds
+            }
+            return n
+        }
+        function within(cp, lo, hi, n,    i) {
+            for (i = 1; i <= n; i++) if (cp >= lo[i] && cp <= hi[i]) return 1
+            return 0
+        }
+        function columns(cp) {
+            if (cp < 0x300) return 1
+            if (within(cp, zlo, zhi, nzero)) return 0
+            return within(cp, wlo, whi, nwide) ? 2 : 1
+        }
+        function border(r, c, ch) {
+            if (r < 0 || r >= H || c < 0 || c >= W) return
+            cell[r, c] = ((r, c) in edge && edge[r, c] != ch) ? "┼" : ch
+            edge[r, c] = ch
+            style[r, c] = ""
+        }
+        function reset_sgr(    a) { fg = ""; bg = ""; for (a = 1; a <= 9; a++) attr[a] = 0; sgr = "" }
+        function colour(codes, i, n) {
+            if (codes[i + 1] == 5) return (i + 2 <= n) ? 2 : n - i
+            if (codes[i + 1] == 2) return (i + 4 <= n) ? 4 : n - i
+            return 0
+        }
+        function apply_sgr(params,    codes, n, i, c, extra, a, out) {
+            n = split(params == "" ? "0" : params, codes, /[;:]/)
+            for (i = 1; i <= n; i++) {
+                c = codes[i] + 0
+                if (c == 0) reset_sgr()
+                else if (c >= 1 && c <= 9) attr[c] = 1
+                else if (c == 22) attr[1] = attr[2] = 0
+                else if (c >= 23 && c <= 29) attr[c - 20] = 0
+                else if ((c >= 30 && c <= 37) || (c >= 90 && c <= 97)) fg = c
+                else if (c == 39) fg = ""
+                else if ((c >= 40 && c <= 47) || (c >= 100 && c <= 107)) bg = c
+                else if (c == 49) bg = ""
+                else if (c == 38 || c == 48 || c == 58) {
+                    extra = colour(codes, i, n)
+                    out = c
+                    for (a = 1; a <= extra; a++) out = out ";" codes[i + a]
+                    if (c == 38) fg = out; else if (c == 48) bg = out
+                    i += extra
+                }
+            }
+            out = ""
+            for (a = 1; a <= 9; a++) if (attr[a]) out = out ";" a
+            if (fg != "") out = out ";" fg
+            if (bg != "") out = out ";" bg
+            sgr = out == "" ? "" : "\033[" substr(out, 2) "m"
+        }
+        BEGIN {
+            for (i = 0; i < 256; i++) byte[sprintf("%c", i)] = i
+            nwide = ranges(wide, wlo, whi)
+            nzero = ranges(zero, zlo, zhi)
+        }
+        /^\001/ {
+            split(substr($0, 2), g, " ")
+            left = g[1]; top = g[2]; width = g[3]; height = g[4]; row = 0; reset_sgr()
+            for (r = top - 1; r <= top + height; r++) { border(r, left - 1, "│"); border(r, left + width, "│") }
+            for (c = left - 1; c <= left + width; c++) { border(top - 1, c, "─"); border(top + height, c, "─") }
+            next
+        }
+        {
+            r = top + row++
+            col = 0; last = -1
+            len = length($0)
+            for (p = 1; p <= len; ) {
+                b = byte[substr($0, p, 1)]
+                if (b == 27) { p = skip_escape($0, p, len); continue }
+                n = b < 0x80 ? 1 : b < 0xE0 ? 2 : b < 0xF0 ? 3 : 4
+                ch = substr($0, p, n)
+                cp = n == 1 ? b : n == 2 ? b % 32 : n == 3 ? b % 16 : b % 8
+                for (k = 1; k < n; k++) cp = cp * 64 + byte[substr($0, p + k, 1)] % 64
+                p += n
+                w = columns(cp)
+                if (w == 0) { if (last >= 0) cell[r, left + last] = cell[r, left + last] ch; continue }
+                if (col + w > width) break
+                cell[r, left + col] = ch; style[r, left + col] = sgr
+                if (w == 2) { cell[r, left + col + 1] = ""; style[r, left + col + 1] = sgr }
+                last = col; col += w
+            }
+        }
+        function skip_escape(s, p, len,    q, c) {
+            c = substr(s, p + 1, 1)
+            if (c == "[") {
+                for (q = p + 2; q <= len && substr(s, q, 1) !~ /[@-~]/; q++) ;
+                if (substr(s, q, 1) == "m") apply_sgr(substr(s, p + 2, q - p - 2))
+                return q + 1
+            }
+            if (c == "]") {
+                for (q = p + 2; q <= len; q++) {
+                    if (substr(s, q, 1) == "\007") return q + 1
+                    if (substr(s, q, 2) == "\033\\") return q + 2
+                }
+                return q
+            }
+            return p + 2
+        }
+        END {
+            for (r = 0; r < H; r++) {
+                line = ""; current = ""
+                for (c = 0; c < W; c++) {
+                    if ((r, c) in cell && cell[r, c] == "") continue
+                    s = (r, c) in style ? style[r, c] : ""
+                    if (s != current) { line = line "\033[0m" s; current = s }
+                    line = line (((r, c) in cell) ? cell[r, c] : " ")
+                }
+                if (current != "") line = line "\033[0m"
+                sub(/ +$/, "", line)
+                print line
+            }
+        }'
+}
+
+render_preview() {  # render_preview <window-id>
+    need tmux
+    local id="${1:-}"
+    [[ -n "$id" ]] || return 0
+
+    local index name width height path
+    IFS=$'\t' read -r index name width height path < <(tmux display-message -p -t "$id" \
+        '#{window_index}	#{window_name}	#{window_width}	#{window_height}	#{pane_current_path}' 2>/dev/null)
+    [[ -n "${index:-}" ]] || { echo "No such window: $id"; return 0; }
+
+    printf '%s: %s  (%s)\n\n' "$index" "$name" "${path/#$HOME/~}"
+
+    local budget
+    budget=$(( ${FZF_PREVIEW_LINES:-$(tput lines 2>/dev/null || echo 40)} - 2 ))
+    (( budget > 3 )) || budget=3
+    capture_panes "$id" | compose_layout "$width" "$height" | tail -n "$budget"
+}
+
+kill_window() {  # kill_window <window-id>
+    local id="${1:-}"
+    [[ -n "$id" ]] || return 0
+    tmux kill-window -t "$id" 2>/dev/null
+}
+
+do_action() {  # do_action <window-id>
+    local id="${1:-}"
+    [[ -n "$id" ]] || return 0
+    local cmd=( tmux select-window -t "$id" )
+    if [[ -n "${TMUX_WINDOWS_DRYRUN:-}" ]]; then
+        printf '%s\n' "${cmd[*]}"
+        return 0
+    fi
+    exec "${cmd[@]}"
+}
+
+interactive() {
+    need fzf tmux
+    local list out
+    list="$(build_list)"
+    [[ -n "$list" ]] || exit 1
+
+    out="$(fzf <<<"$list" \
+        --ansi --delimiter '\t' --with-nth 1 \
+        --layout=reverse \
+        --prompt 'window> ' \
+        --header 'enter: select   •   alt-d: kill   •   ● = here' \
+        --bind "alt-d:execute-silent($SELF --kill {2})+reload($SELF --list)" \
+        --preview "$SELF --preview {2}" \
+        --preview-window 'right,80%,nowrap' )"
+    [[ -n "$out" ]] || exit 0
+    do_action "$(cut -f2 <<<"$out")"
+}
+
+case "${1:-}" in
+    --list)        build_list ;;
+    --preview)     render_preview "${2:-}" ;;
+    --select)      do_action "${2:-}" ;;
+    --kill)        kill_window "${2:-}" ;;
+    --help|-h)     usage ;;
+    "")            interactive ;;
+    *)             die "unknown option: $1 (try --help)" ;;
+esac
