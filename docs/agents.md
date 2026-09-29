@@ -82,7 +82,7 @@ from `docs-claude-helpers`, which belongs to that repo rather than this one.
 
 | Hook | Tool | Guards against |
 |------|------|----------------|
-| `command-guard.sh` | `Bash` | `grep`, `find`, `docker`, `dotnet` and `pwsh` where a WSL-specific replacement is wanted, `rg -rn` (`-r` means `--replace`), `git commit` and `git push` chained in one command, and unbounded `jest` runs that exhaust the VM |
+| `command-guard.sh` | `Bash` | `grep`, `find`, `docker`, `dotnet` and `pwsh` where a WSL-specific replacement is wanted, `rg -rn` (`-r` means `--replace`), `git commit` and `git push` chained in one command, unbounded `jest` runs that exhaust the VM, and any `git push` or `gh pr merge` running without approval |
 | `askuserquestion-preview-guard.sh` | `AskUserQuestion` | `preview` on an option, which swaps the free-text row for a notes field and stops the user answering in their own words |
 
 `command-guard.sh` reads its patterns from the `RULES` array: a regex and the rejection
@@ -90,6 +90,13 @@ message, separated by a unit separator. Heredoc bodies are stripped before match
 content that happens to contain `grep` does not trip a rule. Add a rule by appending to the
 array. The message is the whole of the agent's feedback, so it needs to say what to run
 instead, not just what was refused.
+
+Pushes and pull request merges are not rejected but forced to an `ask` decision, so they
+prompt for approval even in auto mode. The permission rule `Bash(git push:*)` only matches the
+start of a command and misses `git -C <dir> push`, `git -c k=v push`, `env git push` and
+chained forms; the hook matches `push` anywhere after `git`. `git stash push` is local and
+is let through. `gh pr create` is let through too: the push is the review gate, so opening a
+PR for already-pushed changes needs no further approval.
 
 The rejection messages and `template.md` say the same things, deliberately: the template tells
 an agent the convention up front, the hook catches it when the instruction is missed.

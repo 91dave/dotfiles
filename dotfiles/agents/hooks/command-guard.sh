@@ -70,4 +70,15 @@ if [[ "$WRITES_LEFT_AFTER_DISCOUNTING_DISPOSABLE_TARGETS" =~ $SHELL_WRITES_A_FIL
   exit 2
 fi
 
+ANYWHERE_A_WORD_CAN_START='(^|[|&;([:space:]/])'
+PUSHES_WITH_GIT="${ANYWHERE_A_WORD_CAN_START}git(\.exe)?[[:space:]]([^|&;]*[[:space:]])?push([[:space:]]|;|$)"
+MERGES_A_PULL_REQUEST="${ANYWHERE_A_WORD_CAN_START}gh(\.exe)?[[:space:]]+pr[[:space:]]+merge([[:space:]]|;|$)"
+
+WITHOUT_LOCAL_STASH_PUSH=$(printf '%s' "$NORMALISED" | sed -E 's/stash[[:space:]]+push/stash/g')
+
+if [[ "$WITHOUT_LOCAL_STASH_PUSH" =~ $PUSHES_WITH_GIT ]] || [[ "$NORMALISED" =~ $MERGES_A_PULL_REQUEST ]]; then
+  jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: "Outward-facing git push or gh pr merge: needs approval regardless of how it is spelled"}}'
+  exit 0
+fi
+
 exit 0
