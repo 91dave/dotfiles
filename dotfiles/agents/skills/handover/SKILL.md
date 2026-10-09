@@ -3,8 +3,8 @@ name: handover
 description: >
   Write a handover document so a fresh agent can continue the current work. Captures the goal,
   the state as it now stands, and the next concrete steps, with no narrative of how the session
-  got here. Invoke manually: /handover
-argument-hint: "[name] [what the next session should focus on]"
+  got here. Not for capturing reusable learnings (use /write-up for that). Invoke manually: /handover
+argument-hint: "[name] [what the next session should focus on] (to capture reusable learnings instead, use /write-up)"
 disable-model-invocation: true
 ---
 
@@ -23,6 +23,12 @@ carry it on.
 
 Write the file at the git repo root (`git rev-parse --show-toplevel`), falling back to the working
 directory outside a repo.
+
+## 0. Check this is the right skill
+
+If the work is finished, or the session's value is mainly lessons learned rather than next steps,
+`/write-up` fits better. Say so and ask via `AskUserQuestion`: switch to `/write-up`, or write the
+handover anyway.
 
 ## 1. Fix on the goal
 
