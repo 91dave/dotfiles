@@ -458,6 +458,54 @@ kill "$LIVE_PID" 2>/dev/null
 rm -f "$STATE_DIR"/* 2>/dev/null
 
 echo
+echo "background sessions spawned from tmux"
+
+background_session() {  # background_session <spawner pid>
+    bash -c 'sleep 600 & wait' claude daemon run --origin transient \
+        --spawned-by "{\"label\":\"claude\",\"pid\":$1}" >/dev/null 2>&1 &
+    BG_PID=$!
+}
+
+background_hook() {  # background_hook <state>
+    mkdir -p "$WORK_ROOT/bg-proj"
+    ( cd "$WORK_ROOT/bg-proj" \
+        && env -u TMUX_PANE AGENT_STATE_PID="$BG_PID" "$SUT" hook "$1" </dev/null )
+}
+
+reset_server
+new_agent_session spawner
+SP=$(tmux list-panes -t spawner -F '#{pane_id}' | head -1)
+SPAWNER_PID=$(tmux display-message -p -t "$SP" '#{pane_pid}')
+hook_in bg-proj working "$SP"
+background_session "$SPAWNER_PID"
+background_hook done
+
+check "it stamps the pane that spawned it" "done" "$(pane_opt "$SP" @agent)"
+check "it is not listed as outside tmux" "0" \
+    "$("$SUT" list | rg -c 'not in tmux' || echo 0)"
+check "it shares one row with its spawner" "1" \
+    "$("$SUT" list | rg -c "$SP\$" || echo 0)"
+check "the spawner's row carries its state" "done" "$(state_line 1 "$SP")"
+pkill -P "$BG_PID" 2>/dev/null
+
+env -u TMUX_PANE sleep 600 >/dev/null 2>&1 &
+LONE_SPAWNER=$!
+background_session "$LONE_SPAWNER"
+background_hook working
+check "a spawner outside tmux leaves it outside tmux" "1" \
+    "$("$SUT" list | rg -c "!$BG_PID" || echo 0)"
+pkill -P "$BG_PID" 2>/dev/null
+kill "$LONE_SPAWNER" 2>/dev/null
+
+sleep 600 >/dev/null 2>&1 &
+PLAIN_PID=$!
+( cd "$WORK_ROOT" && env -u TMUX_PANE AGENT_STATE_PID="$PLAIN_PID" "$SUT" hook working </dev/null )
+check "an agent with no spawner stays outside tmux" "1" \
+    "$("$SUT" list | rg -c "!$PLAIN_PID" || echo 0)"
+kill "$PLAIN_PID" 2>/dev/null
+rm -f "$STATE_DIR"/* 2>/dev/null
+
+echo
 echo "session titles"
 
 set_title() { tmux select-pane -t "$1" -T "$2"; }

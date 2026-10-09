@@ -274,9 +274,35 @@ record_title_from_transcript() {  # record_title_from_transcript <agent pid>
     return 0
 }
 
+spawner_of() {  # spawner_of <agent pid>
+    local -a args
+    local i
+    [[ -n "${1:-}" ]] || return 1
+    mapfile -t -d '' args < "/proc/$1/cmdline" 2>/dev/null || return 1
+    for (( i = 0; i < ${#args[@]} - 1; i++ )); do
+        [[ "${args[i]}" == "--spawned-by" && "${args[i + 1]}" =~ \"pid\":([0-9]+) ]] \
+            && { printf '%s' "${BASH_REMATCH[1]}"; return 0; }
+    done
+    return 1
+}
+
+tmux_pane_of() {  # tmux_pane_of <pid>
+    local -a vars
+    local var
+    mapfile -t -d '' vars < "/proc/$1/environ" 2>/dev/null || return 1
+    for var in "${vars[@]}"; do
+        [[ "$var" == TMUX_PANE=* ]] && { printf '%s' "${var#TMUX_PANE=}"; return 0; }
+    done
+    return 1
+}
+
 hook() {  # hook <state> [pane]
-    local state="${1:-}" pane="${2:-${TMUX_PANE:-}}" pid
+    local state="${1:-}" pane="${2:-${TMUX_PANE:-}}" pid spawner
     pid="$(agent_pid)"
+    if [[ -z "$pane" ]] && spawner="$(spawner_of "$pid")" \
+        && pane="$(tmux_pane_of "$spawner")"; then
+        pid="$spawner"
+    fi
     record_agent_state "$pid" "$state" "$pane" "$PWD"
 
     if [[ "$state" == "done" && -z "$pane" ]]; then
