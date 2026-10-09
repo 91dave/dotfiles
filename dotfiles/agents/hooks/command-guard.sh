@@ -20,6 +20,7 @@ drop_heredoc_bodies_they_are_file_content_not_commands() {
 }
 
 NORMALISED=$(printf '%s\n' "$COMMAND" | drop_heredoc_bodies_they_are_file_content_not_commands | tr '\n' ';')
+WITHOUT_QUOTED_STRINGS=$(printf '%s' "$NORMALISED" | sed -E "s/'[^']*'//g; s/\"([^\"\\\\]|\\\\.)*\"//g")
 
 US=$'\x1f'
 
@@ -36,7 +37,7 @@ RULES=(
 )
 
 for rule in "${RULES[@]}"; do
-  if [[ "$NORMALISED" =~ ${rule%%"$US"*} ]]; then
+  if [[ "$WITHOUT_QUOTED_STRINGS" =~ ${rule%%"$US"*} ]]; then
     echo "${rule#*"$US"}" >&2
     exit 2
   fi
@@ -52,8 +53,7 @@ fi
 
 DISPOSABLE_WRITE_TARGET='(/dev/null|/dev/std(out|err)|/tmp/[^[:space:];|&]*)'
 
-WRITES_LEFT_AFTER_DISCOUNTING_DISPOSABLE_TARGETS=$(printf '%s' "$NORMALISED" \
-  | sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g" \
+WRITES_LEFT_AFTER_DISCOUNTING_DISPOSABLE_TARGETS=$(printf '%s' "$WITHOUT_QUOTED_STRINGS" \
   | sed -E 's/[0-9]*>&[0-9-]+//g' \
   | sed -E "s#(&|[0-9])?>>?[[:space:]]*${DISPOSABLE_WRITE_TARGET}##g" \
   | sed -E "s#([|&;(][[:space:]]*|^)tee([[:space:]]+-a)?[[:space:]]+${DISPOSABLE_WRITE_TARGET}#\1#g")
