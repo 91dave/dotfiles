@@ -13,11 +13,13 @@ Plans and instructions should always be written for fresh agents. Referencing ho
 You are a model running in {{HARNESS}}. You are running under WSL on a windows system. Use linux commands as usual with the following exceptions:
 
 - use `podman` instead of `docker` for all container operations
+  - podman is running on this WSL machine, so `podman` and `podman.exe` are equivalent
 - use `dotnet.exe` not `dotnet`
 - always run `git commit` and `git push` as separate commands
 - use `pwsh.exe` not `pwsh`
 - use `rg` (ripgrep) instead of `grep` for fast recursive text search
 - use `fdfind` instead of `find` for fast file finding
+- use `terraform` via a container (locally installed version is old)
 
 ### Harness Rules
 
