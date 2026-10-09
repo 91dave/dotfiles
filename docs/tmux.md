@@ -15,11 +15,12 @@ by `install.sh`. Prefix is `Ctrl+w`, not the default `Ctrl+b`.
 | `prefix Ctrl+a` | Claude session picker: attach to a running Claude session, or resume a past one in its own session |
 | `prefix s` | Session picker: `tmux-sessions` in a popup, replacing the built-in `choose-tree` |
 | `prefix w` | Window picker: `tmux-windows` in a popup, for the current session only |
+| `prefix Space` | Combined picker: `tmux-pick` lists agents, then sessions, then the windows in this session when there is more than one. Replaces the built-in `next-layout` |
 | `prefix Ctrl+w` | The built-in `choose-tree -Zw` window picker. Replaces `send-prefix`, so a literal `Ctrl+w` can no longer be sent through |
 
 ## Session helpers
 
-Four fzf pickers, all with previews:
+Five fzf pickers, all with previews:
 
 | Command | Alias | Lists |
 |---------|-------|-------|
@@ -27,6 +28,7 @@ Four fzf pickers, all with previews:
 | `tmux-windows` | `tw` | Windows in the current session, previewing each as laid out on screen |
 | `claude-sessions` | `cs` | Past Claude Code transcripts, to resume or fork |
 | `agent-state pick` | `agents` | Agent panes across every session, by state |
+| `tmux-pick` | | Agents, sessions and windows in one list, grouped under headers, each previewed and acted on by the picker it came from |
 
 `cc` and `pca` launch Claude Code and pi in a dedicated session named after the current
 folder (`cc-dotfiles`, `pi-dotfiles`), picking the next free name if one is taken.

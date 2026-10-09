@@ -39,6 +39,8 @@ Usage:
   agent-state status [session]     server-wide roll-up for the status line, with
                                    agents in the named session coloured as "here"
   agent-state list                 one row per agent pane, for fzf
+  agent-state rows                 the same rows as raw tab-separated fields:
+                                   state, glyph, name, session, directory, pane
   agent-state pane <pid>           the state and tmux pane recorded for one agent,
                                    by the pid its state file is keyed on
   agent-state preview <pane>       render one pane's recent output
@@ -473,12 +475,20 @@ status() {  # status [session asking] [--with-folder] [--width <cols>]
 }
 
 list() {
-    local state session label pane project dir title display
+    local state glyph name session dir pane display
+    while IFS=$'\t' read -r state glyph name session dir pane; do
+        printf -v display '%s  %-10s  %-32.32s  %-20.20s  %s' \
+            "$glyph" "$state" "$name" "$session" "${dir/#$HOME/\~}"
+        printf '%s\t%s\n' "$display" "$pane"
+    done < <(raw_rows)
+}
+
+raw_rows() {
+    local state session label pane project dir title
     while IFS=$'\t' read -r state session label pane project dir title; do
         [[ -n "$pane" ]] || continue
-        printf -v display '%s  %-10s  %-32.32s  %-20.20s  %s' \
-            "$(glyph "$state")" "$state" "${title:-$label}" "$session" "${dir/#$HOME/\~}"
-        printf '%s\t%s\n' "$display" "$pane"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$state" "$(glyph "$state")" "${title:-$label}" "$session" "$dir" "$pane"
     done < <(sorted_rows)
 }
 
@@ -582,6 +592,7 @@ case "${1:-}" in
     ack)       acknowledge_if_finished "${2:-}" ;;
     status)    shift; status "$@" ;;
     list)      list ;;
+    rows)      raw_rows ;;
     pane)      pane_of "${2:-}" ;;
     preview)   preview "${2:-}" ;;
     jump)      jump "${2:-}" ;;

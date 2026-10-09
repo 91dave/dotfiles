@@ -45,6 +45,8 @@ session you are in is always listed, view or not.
 Usage:
   tmux-sessions                 # interactive picker (fzf)
   tmux-sessions --list          # print the session list (non-interactive)
+  tmux-sessions --rows          # the same sessions as raw tab-separated fields:
+                                #   name, windows, directory, last activity, mark
   tmux-sessions --include-views # also list views of a live session
   tmux-sessions --preview <name>   # render one session's preview
   tmux-sessions --help
@@ -72,9 +74,9 @@ is_view_of_a_live_session() {  # is_view_of_a_live_session <name> <group> <origi
     [[ $'\n'"$3"$'\n' == *$'\n'"$2"$'\n'* ]]
 }
 
-build_list() {
+session_rows() {
     need tmux
-    local sessions originals here activity name windows path attached group date mark display
+    local sessions originals here activity name windows path attached group mark
     sessions="$(tmux list-sessions -F '#{session_activity}	#{session_name}	#{session_windows}	#{session_attached}	#{pane_current_path}	#{session_group}' \
         2>/dev/null | sort -rn)"
     originals="$(awk -F'\t' '$2 == $6 { print $6 }' <<<"$sessions")"
@@ -91,13 +93,20 @@ build_list() {
         elif (( attached )); then
             mark='○'
         else
-            mark=' '
+            mark=''
         fi
+        printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$windows" "$path" "$activity" "$mark"
+    done <<<"$sessions"
+}
+
+build_list() {
+    local name mark windows path activity date display
+    while IFS=$'\t' read -r name windows path activity mark; do
         printf -v date '%(%Y-%m-%d %H:%M)T' "$activity"
         printf -v display '%-16s %1s  %-28.28s  %2s win  %s' \
-            "$date" "$mark" "$name" "$windows" "${path/#$HOME/~}"
+            "$date" "${mark:- }" "$name" "$windows" "${path/#$HOME/~}"
         printf '%s\t%s\n' "$display" "$name"
-    done <<<"$sessions"
+    done < <(session_rows)
 }
 
 capture_tail() {  # capture_tail <target> <lines>
@@ -207,6 +216,7 @@ interactive() {
 
 case "${1:-}" in
     --list)        build_list ;;
+    --rows)        session_rows ;;
     --preview)     render_preview "${2:-}" ;;
     --attach)      do_action "${2:-}" ;;
     --kill)        kill_session "${2:-}" ;;

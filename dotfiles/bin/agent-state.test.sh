@@ -285,6 +285,11 @@ contains "keeps the session name in its own column" "eta" "$LIST"
 check "emits one row per agent, not per pane" "2" "$(printf '%s\n' "$LIST" | wc -l)"
 check "ends each row with the pane id" "$H" "$(printf '%s\n' "$LIST" | rg permission | cut -f2)"
 
+ROWS="$("$SUT" rows)"
+check "rows gives raw fields: state, glyph, name, session, directory, pane" \
+    "permission	🔐	eta-proj-w0-p0	eta	$WORK_ROOT/eta-proj	$H" "$(head -1 <<<"$ROWS")"
+check "rows keep the picker's order" "$("$SUT" list | cut -f2)" "$(cut -f6 <<<"$ROWS")"
+
 tmux new-window -d -t eta -n editor 'cat'
 check "a pane with no agent in it is not listed" "2" "$("$SUT" list | wc -l)"
 

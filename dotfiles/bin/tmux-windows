@@ -23,6 +23,8 @@ choice.
 Usage:
   tmux-windows                    # interactive picker (fzf)
   tmux-windows --list             # print the window list (non-interactive)
+  tmux-windows --rows             # the same windows as raw tab-separated fields:
+                                  #   id, index, name, panes, command, directory, active
   tmux-windows --preview <id>     # render one window's preview
   tmux-windows --help
 
@@ -43,21 +45,26 @@ current_session() {
     tmux display-message -p -t "\$${TMUX##*,}" '#{session_name}' 2>/dev/null
 }
 
-build_list() {
+window_rows() {
     need tmux
-    local session id index name panes cmd path active mark display
+    local session
     session="$(current_session)"
     [[ -n "$session" ]] || die "not inside a tmux session"
+    tmux list-windows -t "=$session:" \
+        -F '#{window_id}	#{window_index}	#{window_name}	#{window_panes}	#{pane_current_command}	#{pane_current_path}	#{window_active}' \
+        2>/dev/null
+}
 
+build_list() {
+    local rows id index name panes cmd path active mark display
+    rows="$(window_rows)" || exit 1
     while IFS=$'\t' read -r id index name panes cmd path active; do
         [[ -n "$id" ]] || continue
         if (( active )); then mark='●'; else mark=' '; fi
         printf -v display '%3s %1s  %-24.24s  %2s pane  %-10.10s  %s' \
             "$index" "$mark" "$name" "$panes" "$cmd" "${path/#$HOME/~}"
         printf '%s\t%s\n' "$display" "$id"
-    done < <(tmux list-windows -t "=$session:" \
-        -F '#{window_id}	#{window_index}	#{window_name}	#{window_panes}	#{pane_current_command}	#{pane_current_path}	#{window_active}' \
-        2>/dev/null)
+    done <<<"$rows"
 }
 
 capture_panes() {  # capture_panes <window-id>  -- a geometry line then the lines of each pane
@@ -256,6 +263,7 @@ interactive() {
 
 case "${1:-}" in
     --list)        build_list ;;
+    --rows)        window_rows ;;
     --preview)     render_preview "${2:-}" ;;
     --select)      do_action "${2:-}" ;;
     --kill)        kill_window "${2:-}" ;;

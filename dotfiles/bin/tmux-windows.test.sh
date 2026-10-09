@@ -76,6 +76,11 @@ lacks "leaves inactive windows unmarked" "●" "$(tail -n1 <<<"$out")"
 check "keys each row by window id" \
     "$(tmux display-message -p -t here:logs '#{window_id}')" "$(tail -n1 <<<"$out" | cut -f2)"
 
+rows="$("$SUT" --rows)"
+check "rows give raw fields: id, index, name, panes, active" \
+    "$(tmux display-message -p -t here:editor '#{window_id}')	0	editor	2	1" "$(head -n1 <<<"$rows" | cut -f1-4,7)"
+check "rows include the window's directory" "$PWD" "$(head -n1 <<<"$rows" | cut -f6)"
+
 echo "preview"
 
 left="$(tmux display-message -p -t here:editor.0 '#{pane_id}')"

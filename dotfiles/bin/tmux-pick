@@ -1,0 +1,149 @@
+#!/bin/bash
+
+set -uo pipefail
+
+SELF="$(realpath "$0")"
+BIN="${SELF%/*}"
+[[ "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" == *[Uu][Tt][Ff]* ]] || export LC_ALL=C.UTF-8
+
+die() { echo "tmux-pick: $*" >&2; exit 1; }
+
+need() {
+    for c in "$@"; do
+        command -v "$c" >/dev/null 2>&1 || die "required tool not found: $c"
+    done
+}
+
+usage() {
+    cat <<'EOF'
+tmux-pick: one fzf picker over agents, sessions and windows
+
+Lists, in order and under a header each, the agent panes from `agent-state`,
+every tmux session from `tmux-sessions`, and the windows of the current session
+from `tmux-windows` (left out when the session has only one window). Each row is
+previewed and acted on by the tool it came from.
+
+Usage:
+  tmux-pick                          # interactive picker (fzf)
+  tmux-pick --list                   # print the combined list (non-interactive)
+  tmux-pick --preview <kind> <key>   # render one row's preview
+  tmux-pick --go <kind> <key>        # jump to, attach to or select the row
+  tmux-pick --kill <kind> <key>      # kill a session or window; agents are left alone
+  tmux-pick --help
+
+Keys (interactive):
+  enter        jump to the agent, attach to the session or select the window
+  alt-d        kill the session or window
+EOF
+}
+
+HEADER_WIDTH=72
+
+header() {  # header <title>
+    local rule
+    printf -v rule '%*s' $(( HEADER_WIDTH - ${#1} - 4 )) ''
+    printf '\t\e[1;2m── %s %s\e[0m\theader\t\n' "$1" "${rule// /─}"
+}
+
+fit() {  # fit <text> <columns>  -- printf pads by bytes, which leaves ● and accented names short
+    local text="${1:0:$2}"
+    printf '%s%*s' "$text" $(( $2 - ${#text} )) ''
+}
+
+item() {  # item <kind> <key> <icon> <state> <name> <where> <directory>
+    printf '%s  %s  %s  %s  %s\t\t%s\t%s\n' \
+        "$3" "$(fit "$4" 10)" "$(fit "$5" 28)" "$(fit "$6" 12)" "${7/#$HOME/\~}" "$1" "$2"
+}
+
+with_header() {  # with_header <title>  -- stdin rows, headed only when there are any
+    local rows
+    rows="$(cat)"
+    [[ -n "$rows" ]] || return 0
+    header "$1"
+    printf '%s\n' "$rows"
+}
+
+agent_items() {
+    local state glyph name session dir pane
+    while IFS=$'\t' read -r state glyph name session dir pane; do
+        item agent "$pane" "$glyph" "$state" "$name" "$session" "$dir"
+    done < <("$BIN/agent-state" rows 2>/dev/null)
+}
+
+session_items() {
+    local name windows path activity mark
+    while IFS=$'\t' read -r name windows path activity mark; do
+        item session "$name" '📁' "$mark" "$name" "$windows win" "$path"
+    done < <("$BIN/tmux-sessions" --rows 2>/dev/null)
+}
+
+window_items() {
+    local rows id index name panes cmd path active
+    rows="$("$BIN/tmux-windows" --rows 2>/dev/null)"
+    (( $(wc -l <<<"$rows") > 1 )) || return 0
+    local mark
+    while IFS=$'\t' read -r id index name panes cmd path active; do
+        if (( active )); then mark='●'; else mark=''; fi
+        item window "$id" '🔲' "$mark" "$index:$name" "$panes pane" "$path"
+    done <<<"$rows"
+}
+
+build_list() {
+    need tmux
+    agent_items | with_header Agents
+    session_items | with_header Sessions
+    window_items | with_header Windows
+}
+
+render_preview() {  # render_preview <kind> <key>
+    case "${1:-}" in
+        agent)   "$BIN/agent-state" preview "${2:-}" ;;
+        session) "$BIN/tmux-sessions" --preview "${2:-}" ;;
+        window)  "$BIN/tmux-windows" --preview "${2:-}" ;;
+    esac
+}
+
+do_action() {  # do_action <kind> <key>
+    case "${1:-}" in
+        agent)   exec "$BIN/agent-state" jump "${2:-}" ;;
+        session) exec "$BIN/tmux-sessions" --attach "${2:-}" ;;
+        window)  exec "$BIN/tmux-windows" --select "${2:-}" ;;
+    esac
+}
+
+kill_target() {  # kill_target <kind> <key>
+    case "${1:-}" in
+        session) "$BIN/tmux-sessions" --kill "${2:-}" ;;
+        window)  "$BIN/tmux-windows" --kill "${2:-}" ;;
+    esac
+}
+
+interactive() {
+    need fzf tmux
+    local list out
+    list="$(build_list)"
+    [[ -n "$list" ]] || die "nothing to pick from"
+
+    out="$(fzf <<<"$list" \
+        --ansi --delimiter '\t' --with-nth 1,2 --nth 1 --tabstop 1 \
+        --layout=reverse \
+        --prompt 'tmux> ' \
+        --header 'enter: go   •   alt-d: kill session/window   •   ● = here   ○ = attached elsewhere' \
+        --bind 'load:pos(2)' \
+        --bind 'enter:transform:[[ {3} == header ]] || echo accept' \
+        --bind "alt-d:execute-silent($SELF --kill {3} {4})+reload($SELF --list)" \
+        --preview "$SELF --preview {3} {4}" \
+        --preview-window 'right,60%,nowrap' )"
+    [[ -n "$out" ]] || exit 0
+    do_action "$(cut -f3 <<<"$out")" "$(cut -f4 <<<"$out")"
+}
+
+case "${1:-}" in
+    --list)        build_list ;;
+    --preview)     render_preview "${2:-}" "${3:-}" ;;
+    --go)          do_action "${2:-}" "${3:-}" ;;
+    --kill)        kill_target "${2:-}" "${3:-}" ;;
+    --help|-h)     usage ;;
+    "")            interactive ;;
+    *)             die "unknown option: $1 (try --help)" ;;
+esac
