@@ -17,3 +17,5 @@
 	hooksPath = /home/dave/.git-hooks
 [hooks]
 	maxCommitBodyLines = 2
+[diff]
+    tool = git-delta
