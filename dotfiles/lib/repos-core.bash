@@ -32,14 +32,14 @@ _repos_help() {
     echo "  repos main          🔄 Switch all repos to main/master branch"
     echo "  repos clear [--all] 🗑️  Reset current branch to main and delete it when it holds no unmerged work of yours (--all sweeps every branch)"
     echo "  repos reset         ♻️  fetch, then clear, then status"
-    echo "  repos code <repo>   🚀 Open VS Code in matching repo"
-    echo "  repos ide <repo>    🏗️  Open the repo's solution in Visual Studio"
+    echo "  repos code [repo]   🚀 Open VS Code in matching repo (current repo if omitted)"
+    echo "  repos ide [repo]    🏗️  Open the repo's solution in Visual Studio (current repo if omitted)"
     echo "  repos cmd <repo>    💻 Open WSL window in matching repo"
     echo "  repos cd <repo>     📂 pushd into matching repo (prints path when non-interactive)"
     echo "  repos resolve <r>   📍 Print absolute path to matching repo (GitHub search fallback)"
-    echo "  repos claude <repo> 🤖 Open Claude Code in matching repo"
-    echo "  repos view <repo>   📂 Open GitHub Desktop in matching repo"
-    echo "  repos work <repo>   📚 Open VS Code and GitHub Desktop in matching repo"
+    echo "  repos claude [repo] 🤖 Open Claude Code via cc (tmux) in matching repo (current repo if omitted; alias: cc)"
+    echo "  repos view [repo]   📂 Open GitHub Desktop in matching repo (current repo if omitted)"
+    echo "  repos work [repo]   📚 Open VS Code and GitHub Desktop in matching repo (current repo if omitted)"
     echo "  repos cache         📦 Rebuild repo cache and refresh archived/readonly list"
     echo "  repos help          📖 Show this help message"
     echo ""
@@ -99,6 +99,22 @@ _repos_find() {
     fi
 
     grep "$search" "$REPO_CACHE"
+}
+
+# Absolute path of the matching repo, or the current git repo when no term (or ".") is given
+_repos_target_path() {
+    local search="$1"
+    if [[ -n "$search" && "$search" != "." ]]; then
+        local repo
+        repo=$(_repos_find "$search") || return 1
+        echo "$REPO_HOME/$repo"
+        return
+    fi
+
+    if ! git </dev/null rev-parse --show-toplevel 2>/dev/null; then
+        echo "❌ Error: not inside a git repo; pass a repo search term" >&2
+        return 1
+    fi
 }
 
 # Extract owner/repo from a git remote URL (scp-like or scheme URL forms)
@@ -447,15 +463,19 @@ _repos_clear_worker() {
         # Tracked changes block a switch; untracked cruft does not
         local tracked_dirty=$(printf '%s\n' "$status" | grep -vE '^(\?\?|[[:space:]]*$)')
 
-        if [[ -z "$tracked_dirty" ]] && ! _repos_own_unmerged "$default_branch" HEAD; then
-            if git </dev/null checkout "$default_branch" >& /dev/null; then
-                body+="   🔄 Switched: $current_branch → $default_branch"$'\n'
-                local o rc
-                o=$(_repos_clear_branch "$default_branch" "$current_branch"); rc=$?
-                [[ -n "$o" ]] && body+="$o"$'\n'
-                [[ $rc -eq 0 ]] && deleted=$((deleted + 1))
-                git </dev/null pull >& /dev/null
-            fi
+        if [[ -n "$tracked_dirty" ]]; then
+            body+="   ⏭️  Kept: $current_branch (uncommitted changes)"$'\n'
+        elif _repos_own_unmerged "$default_branch" HEAD; then
+            body+="   ⏭️  Kept: $current_branch (unmerged commits of yours)"$'\n'
+        elif git </dev/null checkout "$default_branch" >& /dev/null; then
+            body+="   🔄 Switched: $current_branch → $default_branch"$'\n'
+            local o rc
+            o=$(_repos_clear_branch "$default_branch" "$current_branch"); rc=$?
+            [[ -n "$o" ]] && body+="$o"$'\n'
+            [[ $rc -eq 0 ]] && deleted=$((deleted + 1))
+            git </dev/null pull >& /dev/null
+        else
+            body+="   ❌ Failed to switch: $current_branch → $default_branch"$'\n'
         fi
     elif [[ "$all" != true ]]; then
         return
@@ -585,11 +605,13 @@ _repos_status_worker() {
         # git cherry detects squash/rebase-merged commits
         local cherry=$(git </dev/null cherry "origin/$default_branch" HEAD 2>/dev/null)
         unmerged=$(echo "$cherry" | grep -c '^+' || true)
+        local dirty_note=""
+        [[ "$dirty_count" -gt 0 ]] && dirty_note=" 📝 $dirty_count file(s)"
         if [[ "$unmerged" -eq 0 ]]; then
             merged=true
-            printf 'OFF\t📁 %s (%s) ✅ merged\n' "$repo_name" "$current_branch" >> "$out.cat"
+            printf 'OFF\t📁 %s (%s) ✅ merged%s\n' "$repo_name" "$current_branch" "$dirty_note" >> "$out.cat"
         else
-            printf 'OFF\t📁 %s (%s) ⚠️  %s unmerged commit(s)\n' "$repo_name" "$current_branch" "$unmerged" >> "$out.cat"
+            printf 'OFF\t📁 %s (%s) ⚠️  %s unmerged commit(s)%s\n' "$repo_name" "$current_branch" "$unmerged" "$dirty_note" >> "$out.cat"
         fi
     fi
 
@@ -769,19 +791,10 @@ _repos_main() {
 }
 
 _repos_edit() {
-    local search="$1"
+    local repo_path
+    repo_path=$(_repos_target_path "$1") || return 1
 
-    if [[ -z "$search" || "$search" == "." ]]; then
-        echo "🚀 Opening VS Code in current folder..."
-        cmd.exe /c code .
-        return
-    fi
-
-    local repo
-    repo=$(_repos_find "$search") || return 1
-
-    local repo_path="$REPO_HOME/$repo"
-    echo "🚀 Opening VS Code in $repo..."
+    echo "🚀 Opening VS Code in ${repo_path#"$REPO_HOME/"}..."
     (cd "$repo_path" && cmd.exe /c code .)
 }
 
@@ -799,11 +812,10 @@ _repos_devenv() {
 }
 
 _repos_ide() {
-    local search="$1"
-    local repo
-    repo=$(_repos_find "$search") || return 1
+    local repo_path
+    repo_path=$(_repos_target_path "$1") || return 1
 
-    local repo_path="$REPO_HOME/$repo"
+    local repo="${repo_path#"$REPO_HOME/"}"
     local -a solutions
     mapfile -t solutions < <(_repos_solutions "$repo_path" 1)
     [[ ${#solutions[@]} -eq 0 ]] && mapfile -t solutions < <(_repos_solutions "$repo_path" 3)
@@ -827,12 +839,10 @@ _repos_ide() {
 }
 
 _repos_view() {
-    local search="$1"
-    local repo
-    repo=$(_repos_find "$search") || return 1
+    local repo_path
+    repo_path=$(_repos_target_path "$1") || return 1
 
-    local repo_path="$REPO_HOME/$repo"
-    echo "📁 Opening $repo in GitHub Desktop"
+    echo "📁 Opening ${repo_path#"$REPO_HOME/"} in GitHub Desktop"
     (cd "$repo_path" && cmd.exe /c github)
 }
 
@@ -861,14 +871,18 @@ _repos_cd() {
     pushd "$repo_path" > /dev/null
 }
 
+# Delegates to the interactive cc function, which owns tmux session handling
 _repos_claude() {
-    local search="$1"
-    local repo
-    repo=$(_repos_find "$search") || return 1
+    if ! declare -F cc >/dev/null; then
+        echo "❌ Error: cc not loaded; run 'repos claude' from an interactive shell" >&2
+        return 1
+    fi
 
-    local repo_path="$REPO_HOME/$repo"
-    echo "🤖 Opening Claude Code in $repo..."
-    (cd "$repo_path" && cmd.exe /c claude)
+    local repo_path
+    repo_path=$(_repos_target_path "$1") || return 1
+
+    echo "🤖 Opening Claude Code in ${repo_path#"$REPO_HOME/"}..."
+    (cd "$repo_path" && cc)
 }
 
 _repos_dispatch() {
@@ -895,7 +909,7 @@ _repos_dispatch() {
         ide|vs)         _repos_ide "$2" ;;
         cmd)            _repos_cmd "$2" ;;
         cd|resolve)     _repos_resolve "$2" ;;
-        claude)         _repos_claude "$2" ;;
+        claude|cc)      _repos_claude "$2" ;;
         *)              _repos_help ;;
     esac
 }

@@ -237,7 +237,7 @@ REPOS_STATUS_JOBS=24 repos status # more concurrency
 
 **Shows:**
 - Repos not on main/master branch
-- Repos with uncommitted changes
+- Repos with uncommitted changes (on main they get their own section; off main the branch line gets a `📝 N file(s)` marker, which is why `repos clear` kept it)
 - With `--all`, repos with merged branches that can be cleared (each branch needs a `git cherry`, so it is opt-in). Pairs with `repos clear --all`.
 - Merge status indicators for branches (uses `git cherry` for accurate squash/rebase merge detection)
 
@@ -245,8 +245,9 @@ REPOS_STATUS_JOBS=24 repos status # more concurrency
 ```
 🔍 Checking repo status...
 
-🌿 Not on main (2):
+🌿 Not on main (3):
    📁 myapp (feature-branch) ✅ merged
+   📁 scratch (work/tweak) ✅ merged 📝 1 file(s)
    📁 another-project (hotfix) ⚠️ 3 unmerged commit(s)
 
 📝 Uncommitted changes (1):
@@ -310,6 +311,7 @@ Pass `--all` to restore the full sweep: repos already on main are no longer skip
 - Only deletes a branch when it holds no unmerged work of yours (detected via `git cherry`)
 - Without `--all`, skips repos already on the default branch without inspecting any branches
 - Skips repos with uncommitted tracked changes rather than switching away from them
+- Says why each off-main branch was kept (uncommitted changes, or unmerged commits of yours)
 
 **Example output:**
 ```
@@ -318,6 +320,10 @@ Pass `--all` to restore the full sweep: repos already on main are no longer skip
 📁 myapp
    🔄 Switched: feature/old-feature → main
    ✅ Deleted: feature/old-feature (merged)
+📁 scratch
+   ⏭️  Kept: work/tweak (uncommitted changes)
+📁 another-project
+   ⏭️  Kept: hotfix (unmerged commits of yours)
 
 ✅ Deleted 1 branch(es)
 ```
@@ -353,7 +359,7 @@ repos code [search]
 ```
 
 **Parameters:**
-- `search` - Repository name or partial match
+- `search` - Repository name or partial match; omit (or pass `.`) to open the repo you are in
 
 **Example:**
 ```bash
@@ -370,7 +376,7 @@ repos ide [search]
 ```
 
 **Parameters:**
-- `search` - Repository name or partial match
+- `search` - Repository name or partial match; omit (or pass `.`) to open the repo you are in
 
 **Example:**
 ```bash
@@ -415,12 +421,15 @@ repos view [search]
 ```
 
 **Parameters:**
-- `search` - Repository name or partial match
+- `search` - Repository name or partial match; omit (or pass `.`) to open the repo you are in
 
 **Example:**
 ```bash
 repos view myapp
 # Opens the matching repository in GitHub Desktop
+
+repos view
+# Opens the current repository (from any subfolder) in GitHub Desktop
 ```
 
 **Requirements:**
@@ -462,11 +471,14 @@ cd "$(repos resolve myapp)"
 
 #### repos claude
 
-Opens Claude Code in a matching repository.
+Opens Claude Code in a matching repository via the `cc` shell function, so it gets the same tmux handling: a new `cc-<folder>` session outside tmux, the current pane inside it. `repos cc` is an alias. Needs an interactive shell, since `cc` is a shell function.
 
 ```bash
 repos claude [search]
 ```
+
+**Parameters:**
+- `search` - Repository name or partial match; omit (or pass `.`) to open the repo you are in
 
 **Example:**
 ```bash
