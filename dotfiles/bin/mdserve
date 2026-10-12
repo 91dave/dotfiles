@@ -1,0 +1,5 @@
+#!/bin/bash
+set -euo pipefail
+
+BIN_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+exec node "$BIN_DIR/mdserve.d/cli.mjs" "$@"

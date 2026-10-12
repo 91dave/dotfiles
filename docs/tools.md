@@ -55,3 +55,22 @@ repos resolve documents      # → /mnt/c/Code/quartex-services/qtms-documents
 repos ls terraform           # List all terraform-related repos
 cd "$(repos resolve myapp)"  # cd into a repo by fuzzy name
 ```
+
+---
+
+## mdserve
+
+Render an MDX plan document (mermaid diagrams, file trees, highlighted code, task breakdowns) as standalone HTML and serve it on `127.0.0.1` for browser review. The renderer behind the `visual-plan` skill. Needs only Node; code lives in `dotfiles/bin/mdserve.d/`.
+
+### Usage
+
+```bash
+mdserve serve <plan>                 # Serve on 7842 (free port if taken), re-render per request
+mdserve serve <plan> --port <n>      # Fixed port
+mdserve serve <plan> --idle <mins>   # Idle minutes before it stops (default 30, 0 = never)
+mdserve render <plan>                # Standalone HTML to stdout
+mdserve render <plan> --out <file>   # Standalone HTML to a file
+mdserve test                         # Renderer and CLI self-check
+```
+
+`<plan>` is a `.md`/`.mdx` file or a directory containing `plan.mdx`. The page heading is the body's leading `# H1` if it has one, else frontmatter `title`; frontmatter `tags: [ 'a', 'b' ]` become header chips next to `workItem` (an `AB#123` value links to Azure DevOps). The MDX is evaluated to render it, so only point it at trusted plans.

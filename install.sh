@@ -82,6 +82,7 @@ link bin/tmux-sessions   "$HOME/.local/bin/tmux-sessions"
 link bin/tmux-windows    "$HOME/.local/bin/tmux-windows"
 link bin/tmux-pick       "$HOME/.local/bin/tmux-pick"
 link bin/agent-state     "$HOME/.local/bin/agent-state"
+link bin/mdserve         "$HOME/.local/bin/mdserve"
 
 if $REMOVE_BAK; then
     echo "Removing backups..."

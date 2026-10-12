@@ -83,7 +83,7 @@ unexpected bytes:
 ```
 
 Regenerate the hash on any version bump, and update `MERMAID` in
-`lib/render.mjs`:
+`dotfiles/bin/mdserve.d/render.mjs`:
 
 ```bash
 curl -sL https://cdn.jsdelivr.net/npm/mermaid@<version>/dist/mermaid.min.js \
@@ -98,4 +98,4 @@ Derived from the `visual-plan` skill in
 [BuilderIO/skills](https://github.com/BuilderIO/skills/tree/main/skills/visual-plan)
 (MIT), built on [Agent-Native](https://github.com/BuilderIO/agent-native/) (MIT).
 The authoring guidance is retained; the hosted renderer, MCP connector, and
-canvas are not. See `README.md`.
+canvas are not. See the skill's `README.md`.

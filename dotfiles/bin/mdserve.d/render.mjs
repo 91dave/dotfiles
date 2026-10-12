@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { Marked } from "../assets/marked.esm.js";
+import { Marked } from "./assets/marked.esm.js";
 import {
   PAIRED,
   components,
@@ -11,7 +11,7 @@ import {
 } from "./components.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ASSETS = join(HERE, "..", "assets");
+const ASSETS = join(HERE, "assets");
 
 export const MERMAID = {
   version: "11.16.1",
@@ -48,6 +48,21 @@ function splitFrontmatter(source) {
     if (pair) meta[pair[1]] = pair[2].trim().replace(/^["']|["']$/g, "");
   }
   return { meta, body: source.slice(match[0].length) };
+}
+
+function liftLeadingHeading(body) {
+  const match = body.match(/^\s*#[ \t]+(.+?)[ \t#]*(?:\r?\n|$)/);
+  if (!match) return { heading: undefined, body };
+  return { heading: match[1], body: body.slice(match[0].length) };
+}
+
+function parseTags(raw) {
+  if (!raw) return [];
+  const list = raw.match(/^\[(.*)\]$/)?.[1] ?? raw;
+  return list
+    .split(",")
+    .map((tag) => tag.trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
 }
 
 function evaluateAttributes(raw, componentName) {
@@ -145,7 +160,8 @@ function createMarked(usesMermaid) {
 }
 
 export async function renderMdx(source, assets) {
-  const { meta, body } = splitFrontmatter(source);
+  const { meta, body: rawBody } = splitFrontmatter(source);
+  const { heading, body } = liftLeadingHeading(rawBody);
   const usesMermaid = { value: false };
   const marked = createMarked(usesMermaid);
 
@@ -165,7 +181,13 @@ export async function renderMdx(source, assets) {
     );
   }
 
-  return wrapDocument({ meta, html, assets, usesMermaid: usesMermaid.value });
+  return wrapDocument({
+    meta,
+    title: heading ?? meta.title ?? "Plan",
+    html,
+    assets,
+    usesMermaid: usesMermaid.value,
+  });
 }
 
 const AZDO_WORK_ITEM_URL =
@@ -179,12 +201,14 @@ function workItemChip(workItem) {
     : `<span class="vp-chip">${label}</span>`;
 }
 
-function wrapDocument({ meta, html, assets, usesMermaid }) {
-  const title = meta.title ?? "Plan";
+function wrapDocument({ meta, title, html, assets, usesMermaid }) {
   const brief = meta.brief
     ? `<p class="vp-brief">${escapeHtml(meta.brief)}</p>`
     : "";
   const item = meta.workItem ? workItemChip(meta.workItem) : "";
+  const tags = parseTags(meta.tags)
+    .map((tag) => `<span class="vp-chip vp-chip--muted">${escapeHtml(tag)}</span>`)
+    .join("");
 
   const mermaidTag = usesMermaid
     ? `<script src="${MERMAID.src}" integrity="${MERMAID.integrity}" crossorigin="anonymous"></script>
@@ -211,7 +235,7 @@ ${assets.planCss}
 <body>
 <main class="vp-doc">
 <header class="vp-head">
-<div class="vp-head__meta">${item}<span class="vp-chip vp-chip--muted">Plan</span></div>
+<div class="vp-head__meta">${item}${tags}</div>
 <h1>${escapeHtml(title)}</h1>
 ${brief}
 </header>

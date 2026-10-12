@@ -74,6 +74,61 @@ test("a work item that is not an AB# reference stays unlinked", async () => {
   assert.match(html, /<span class="vp-chip">Spike<\/span>/);
 });
 
+const headerOf = (html) =>
+  html.slice(html.indexOf('<header class="vp-head">'), html.indexOf("</header>"));
+
+test("a leading markdown h1 becomes the page title and heading", async () => {
+  const html = await render("# Storage Migration\n\nBody.", "brief: B");
+  assert.match(html, /<title>Storage Migration<\/title>/);
+  assert.match(headerOf(html), /<h1>Storage Migration<\/h1>/);
+});
+
+test("a leading h1 is lifted out of the body rather than repeated", async () => {
+  const html = await render("# Storage Migration\n\nBody.", "brief: B");
+  assert.equal(count(html, "Storage Migration</h1>"), 1);
+});
+
+test("a leading h1 wins over the frontmatter title", async () => {
+  const html = await render("# From Heading\n\nBody.", "title: From Frontmatter");
+  assert.match(headerOf(html), /<h1>From Heading<\/h1>/);
+});
+
+test("a leading h1 is found without any frontmatter", async () => {
+  const html = await renderMdx("\n# Bare Heading\n\nBody.\n", assets);
+  assert.match(headerOf(html), /<h1>Bare Heading<\/h1>/);
+});
+
+test("an h1 that is not the first content line is left in the body", async () => {
+  const html = await render("Intro.\n\n# Later Heading", "title: Storage");
+  assert.match(headerOf(html), /<h1>Storage<\/h1>/);
+  assert.match(html, /<h1[^>]*>Later Heading<\/h1>/);
+});
+
+test("frontmatter tags render as chips in the header", async () => {
+  const header = headerOf(await render("Body.", "title: T\ntags: [ 'plan', \"draft\", spike ]"));
+  assert.match(header, /<span class="vp-chip vp-chip--muted">plan<\/span>/);
+  assert.match(header, /<span class="vp-chip vp-chip--muted">draft<\/span>/);
+  assert.match(header, /<span class="vp-chip vp-chip--muted">spike<\/span>/);
+});
+
+test("a single scalar tag renders as one chip", async () => {
+  const header = headerOf(await render("Body.", "title: T\ntags: plan"));
+  assert.equal(count(header, "vp-chip--muted"), 1);
+});
+
+test("no tags means no hardcoded Plan chip", async () => {
+  const header = headerOf(await render("Body.", "title: T"));
+  assert.doesNotMatch(header, /vp-chip--muted/);
+});
+
+test("the work item chip stays linked alongside tags", async () => {
+  const header = headerOf(
+    await render("Body.", "title: T\nworkItem: AB#12345\ntags: [ 'plan' ]"),
+  );
+  assert.match(header, /<a class="vp-chip" href="[^"]+\/12345">AB#12345<\/a>/);
+  assert.match(header, />plan<\/span>/);
+});
+
 test("markdown renders as normal prose", async () => {
   const body = await renderBody("## Heading\n\nSome **bold** text.");
   assert.match(body, /<h2[^>]*>Heading<\/h2>/);

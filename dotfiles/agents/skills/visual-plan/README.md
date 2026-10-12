@@ -18,14 +18,15 @@ terminal.
 
 ## Running it
 
-Nothing to install beyond Node.
+The renderer is the `mdserve` CLI (`dotfiles/bin/mdserve`, code in
+`dotfiles/bin/mdserve.d`), linked onto `PATH` by `install.sh`. It needs only Node.
 
 ```sh
-node lib/serve.mjs .plans/my-plan              # render and serve, prints the URL
-node lib/serve.mjs ~/.claude/plans/foo.md      # a file works too
-node lib/serve.mjs .plans/my-plan --port 8123  # fixed port
-node lib/serve.mjs .plans/my-plan --out plan.html
-node --test lib/render.test.mjs                # after changing the renderer
+mdserve serve .plans/my-plan                 # render and serve, prints the URL
+mdserve serve ~/.claude/plans/foo.md         # a file works too
+mdserve serve .plans/my-plan --port 8123     # fixed port
+mdserve render .plans/my-plan --out plan.html
+mdserve test                                 # after changing the renderer
 ```
 
 The target can be a `.md` file, a `.mdx` file, or a directory containing
@@ -61,7 +62,7 @@ A plan with no diagrams has zero external URLs and works with the network
 disabled. A plan with diagrams degrades to readable diagram source if the CDN is
 blocked, rather than showing an empty box.
 
-`assets/LICENSES.md` covers the vendored libraries and how to regenerate the
+`dotfiles/bin/mdserve.d/assets/LICENSES.md` covers the vendored libraries and how to regenerate the
 integrity hash on a version bump.
 
 ## Alongside /plan-tasks

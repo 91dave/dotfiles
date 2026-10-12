@@ -72,7 +72,7 @@ where its content comes from, and what happens after approval differ.
 5. **Serve it and hand off.**
 
    ```bash
-   node <skill-dir>/lib/serve.mjs <plan-file-or-dir>
+   mdserve serve <plan-file-or-dir>
    ```
 
    Print the URL it returns, say in a line or two what the plan covers, and ask
@@ -176,19 +176,20 @@ with filler and never ship a single-step plan.
 
 ## Commands
 
-Run with `node`; there is nothing to install.
+The `mdserve` CLI is on `PATH`; `mdserve --help` has the full usage.
 
 | Command | Purpose |
 |---|---|
-| `node <skill-dir>/lib/serve.mjs ~/.claude/plans/<name>.md` | Serve the harness plan file, in plan mode |
-| `node <skill-dir>/lib/serve.mjs .plans/<slug>` | Serve a plan folder, outside plan mode |
-| `... <target> --port 8123` | Override the default `7842` |
-| `... <target> --idle 60` | Idle minutes before it stops; `0` runs until stopped |
-| `... <target> --out plan.html` | Write a standalone file to share or attach. **Writes to disk, so never in plan mode** |
-| `node --test <skill-dir>/lib/render.test.mjs` | Self-check after changing the renderer |
+| `mdserve serve ~/.claude/plans/<name>.md` | Serve the harness plan file, in plan mode |
+| `mdserve serve .plans/<slug>` | Serve a plan folder, outside plan mode |
+| `mdserve serve <target> --port 8123` | Override the default `7842` |
+| `mdserve serve <target> --idle 60` | Idle minutes before it stops; `0` runs until stopped |
+| `mdserve render <target> --out plan.html` | Write a standalone file to share or attach. **Writes to disk, so never in plan mode** |
+| `mdserve test` | Self-check after changing the renderer |
 
 The target may be a `.md` file, a `.mdx` file, or a directory containing
-`plan.mdx`. Everything except `--out` only reads.
+`plan.mdx`. Everything except `render --out` only reads; `render` without
+`--out` prints the HTML to stdout.
 
 Servers stop themselves after 30 idle minutes, so they do not accumulate across
 sessions. Do not hunt down and kill old ones by process name: that pattern

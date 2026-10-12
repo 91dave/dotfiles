@@ -12,20 +12,25 @@ the thing.
 title: Storage Migration Review
 brief: Move the associated-transcript object type onto the per-tenant bucket.
 workItem: AB#12345
+tags: [ 'plan' ]
 ---
 ```
 
 `title` becomes the page title and heading. `brief` is a one-line summary under
 it. `workItem` renders as a chip and is omitted when there is no backlog item; an
 `AB#12345` value links to the item in Azure DevOps, and anything else renders as a
-plain chip. Values are plain text, not markdown, and quotes are stripped.
+plain chip. `tags` renders one muted chip per entry beside the work item; always
+emit `tags: [ 'plan' ]`. Values are plain text, not markdown, and quotes are
+stripped.
 
 The file is `.plans/<slug>/plan.mdx` normally, and the harness plan file
 (`~/.claude/plans/<name>.md`) when running in plan mode. The format is identical:
 the renderer accepts `.md` and `.mdx` alike, and the extension changes nothing
 about what you write.
 
-Do not open the body with an `# H1` repeating the title. Start at `##`.
+If the first line of the body is an `# H1`, it replaces `title` as the page
+heading and is not repeated in the body. Use `title` or a leading H1, not both,
+and start every other heading at `##`.
 
 ## Code
 
