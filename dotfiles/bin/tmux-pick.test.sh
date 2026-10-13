@@ -94,10 +94,18 @@ contains "leads an agent with its state glyph" "❓" "$(of_kind agent "$out" | c
 contains "leads a session with a folder" "📁" "$(of_kind session "$out" | cut -f1 | head -n1 | cut -c1-6)"
 contains "leads a window with a square" "🔲" "$(of_kind window "$out" | cut -f1 | cut -c1-6)"
 contains "marks the session you are in" "●" "$(of_kind session "$out" | rg $'\there$' | cut -f1)"
-contains "marks the window you are on" "🔲  ●           0:editor" "$(of_kind window "$out" | cut -f1 | plain)"
-contains "leaves other windows unmarked" "🔲              1:logs" "$(of_kind window "$out" | cut -f1 | plain)"
+contains "marks the window you are on" "🔲 ●  0:editor" "$(of_kind window "$out" | cut -f1 | plain)"
+contains "leaves other windows unmarked" "🔲    1:logs" "$(of_kind window "$out" | cut -f1 | plain)"
 lacks "drops the type column" "session" "$(of_kind session "$out" | cut -f1)"
-contains "shows only the mark in the state column" "📁  ●           here" "$(of_kind session "$out" | cut -f1 | plain)"
+contains "shows only the mark in the state column" "📁 ●  here" "$(of_kind session "$out" | cut -f1 | plain)"
+lacks "leaves an agent in another session unmarked" "●" "$(of_kind agent "$out" | cut -f1)"
+here_agent_pane="$(tmux display-message -p -t here:editor '#{pane_id}')"
+sleep 60 & here_agent_pid=$!
+printf 'question\n%s\n%s\n' "$here_agent_pane" "$WORKDIR" > "$AGENT_STATE_DIR/$here_agent_pid"
+contains "marks an agent in the session you are in" "❓ ●  " \
+    "$(of_kind agent "$("$SUT" --list)" | rg $'\t'"$here_agent_pane"'$' | cut -f1 | plain)"
+kill "$here_agent_pid"
+rm -f "$AGENT_STATE_DIR/$here_agent_pid"
 widths="$(rg -v $'\theader\t' <<<"$out" | cut -f1 | plain \
     | while IFS= read -r line; do printf '%s\n' "${line%%"$WORKDIR"*}" | LC_ALL=C.UTF-8 wc -L; done \
     | sort -u | wc -l)"

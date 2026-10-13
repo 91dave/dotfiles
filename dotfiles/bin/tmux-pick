@@ -50,9 +50,9 @@ fit() {  # fit <text> <columns>  -- printf pads by bytes, which leaves ● and a
     printf '%s%*s' "$text" $(( $2 - ${#text} )) ''
 }
 
-item() {  # item <kind> <key> <icon> <state> <name> <where> <directory>
-    printf '%s  %s  %s  %s  %s\t\t%s\t%s\n' \
-        "$3" "$(fit "$4" 10)" "$(fit "$5" 28)" "$(fit "$6" 12)" "${7/#$HOME/\~}" "$1" "$2"
+item() {  # item <kind> <key> <icon> <mark> <name> <where> <directory>
+    printf '%s %s  %s  %s  %s\t\t%s\t%s\n' \
+        "$3" "$(fit "$4" 1)" "$(fit "$5" 34)" "$(fit "$6" 12)" "${7/#$HOME/\~}" "$1" "$2"
 }
 
 with_header() {  # with_header <title>  -- stdin rows, headed only when there are any
@@ -63,18 +63,23 @@ with_header() {  # with_header <title>  -- stdin rows, headed only when there ar
     printf '%s\n' "$rows"
 }
 
-agent_items() {
-    local state glyph name session dir pane
+agent_items() {  # agent_items <session rows>
+    local -A session_marks
+    local name windows path activity mark state glyph session dir pane
+    while IFS=$'\t' read -r name windows path activity mark; do
+        [[ -n "$name" ]] && session_marks[$name]="$mark"
+    done <<<"$1"
     while IFS=$'\t' read -r state glyph name session dir pane; do
-        item agent "$pane" "$glyph" "$state" "$name" "$session" "$dir"
+        item agent "$pane" "$glyph" "${session_marks[$session]:-}" "$name" "$session" "$dir"
     done < <("$BIN/agent-state" rows 2>/dev/null)
 }
 
-session_items() {
+session_items() {  # session_items <session rows>
     local name windows path activity mark
     while IFS=$'\t' read -r name windows path activity mark; do
+        [[ -n "$name" ]] || continue
         item session "$name" '📁' "$mark" "$name" "$windows win" "$path"
-    done < <("$BIN/tmux-sessions" --rows 2>/dev/null)
+    done <<<"$1"
 }
 
 window_items() {
@@ -90,8 +95,10 @@ window_items() {
 
 build_list() {
     need tmux
-    agent_items | with_header Agents
-    session_items | with_header Sessions
+    local sessions
+    sessions="$("$BIN/tmux-sessions" --rows 2>/dev/null)"
+    agent_items "$sessions" | with_header Agents
+    session_items "$sessions" | with_header Sessions
     window_items | with_header Windows
 }
 

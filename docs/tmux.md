@@ -49,6 +49,9 @@ with `○`. The distinction matters because the two do opposite things: enter on
 closes the picker, while enter on `○` detaches that other terminal (see *One terminal per
 session*). It hides views of a live session unless given `--include-views`.
 
+`tmux-pick` gives agent rows the same marks, taken from the session each agent runs in. Its
+state shows only as the emoji, which leaves the title column wider.
+
 ### Resuming from tmux
 
 `prefix Ctrl+a` runs `claude-sessions --jump`, the same list of past transcripts with the
