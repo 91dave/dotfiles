@@ -122,6 +122,13 @@ Runs fetch, clear, and status in sequence — a one-command daily refresh.
 repos reset
 ```
 
+With a target, resets a single repo instead: discards all uncommitted changes (tracked edits and untracked files; ignored files are kept), switches back to main/master, pulls, and deletes the branch it was on. If that branch holds unmerged commits they are listed and you are asked before it is deleted; anything but `y` keeps it.
+
+```bash
+repos reset .            # the repo you are in
+repos reset my-service   # the repo matching the search term, from anywhere
+```
+
 #### repos cache
 
 Scans for repositories and updates the cache file.

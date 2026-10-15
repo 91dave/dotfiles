@@ -53,7 +53,7 @@ Comprehensive documentation for all helper functions and aliases is available in
 - `gws <cmd>` - Workspace manager (cd/claude/edit/cmd)
 - `khelp` - Kubernetes helpers
 - `reload` - Reload all dotfiles without restarting shell
-- `repos reset` - Daily refresh (fetch + clear + status)
+- `repos reset [repo|.]` - Daily refresh (fetch + clear + status), or with a target: discard changes, back to main, pull, delete branch
 - `shell_help` - Shell, history and search helpers
 - `todo <cmd>` - Simple todo list (add/done/rm/ls)
 - `tphelp` - Telepresence helpers

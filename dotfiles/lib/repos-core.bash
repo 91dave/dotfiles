@@ -31,7 +31,7 @@ _repos_help() {
     echo "  repos fetch         🔁 Fetch all repos and pull where possible"
     echo "  repos main          🔄 Switch all repos to main/master branch"
     echo "  repos clear [--all] 🗑️  Reset current branch to main and delete it when it holds no unmerged work of yours (--all sweeps every branch)"
-    echo "  repos reset         ♻️  fetch, then clear, then status"
+    echo "  repos reset [repo]  ♻️  fetch, then clear, then status; with a repo (or .) discard its changes, return to main, pull and delete the branch"
     echo "  repos code [repo]   🚀 Open VS Code in matching repo (current repo if omitted)"
     echo "  repos ide [repo]    🏗️  Open the repo's solution in Visual Studio (current repo if omitted)"
     echo "  repos cmd <repo>    💻 Open WSL window in matching repo"
@@ -543,6 +543,76 @@ _repos_clear() {
     fi
 }
 
+_repos_confirm() {
+    local answer
+    read -r -p "$1 [y/N] " answer || { echo ""; return 1; }
+    [[ "$answer" =~ ^[Yy]$ ]]
+}
+
+# Discard all local changes in one repo, return to an up-to-date default branch and drop the old branch
+_repos_reset_one() {
+    local repo_path
+    repo_path=$(_repos_target_path "$1") || return 1
+    cd "$repo_path" || return 1
+
+    local default_branch
+    if ! default_branch=$(_git_get_default_branch); then
+        echo "❌ No main/master branch in ${repo_path#"$REPO_HOME/"}" >&2
+        return 1
+    fi
+
+    echo "♻️  Resetting ${repo_path#"$REPO_HOME/"}..."
+    git </dev/null fetch -q origin "$default_branch" 2>/dev/null || echo "   ⚠️  Fetch failed; continuing with local state"
+
+    git </dev/null reset -q --hard HEAD
+    git </dev/null clean -q -fd
+    echo "   🧹 Discarded uncommitted changes"
+
+    local branch
+    branch=$(git </dev/null branch --show-current)
+
+    if [[ "$branch" != "$default_branch" ]]; then
+        if ! git </dev/null checkout -q "$default_branch" 2>/dev/null; then
+            echo "   ❌ Failed to switch: ${branch:-detached HEAD} → $default_branch" >&2
+            return 1
+        fi
+        echo "   🔄 Switched: ${branch:-detached HEAD} → $default_branch"
+    fi
+
+    if git </dev/null pull -q --ff-only origin "$default_branch" >& /dev/null; then
+        echo "   📥 Pulled $default_branch"
+    else
+        echo "   ⚠️  Pull failed on $default_branch"
+    fi
+
+    [[ -z "$branch" || "$branch" == "$default_branch" ]] && return 0
+
+    local -a unmerged
+    mapfile -t unmerged < <(_repos_unmerged_shas "$default_branch" "$branch")
+    if [[ ${#unmerged[@]} -gt 0 ]]; then
+        git </dev/null log --oneline --no-walk "${unmerged[@]}" | sed 's/^/      /'
+        if ! _repos_confirm "   ⚠️  $branch has ${#unmerged[@]} unmerged commit(s). Delete it?"; then
+            echo "   ⏭️  Kept: $branch"
+            return 0
+        fi
+    fi
+
+    if git </dev/null branch -q -D "$branch" >& /dev/null; then
+        echo "   ✅ Deleted: $branch"
+    else
+        echo "   ❌ Failed to delete: $branch" >&2
+        return 1
+    fi
+}
+
+_repos_reset() {
+    if [[ $# -gt 0 ]]; then
+        (_repos_reset_one "$1")
+        return
+    fi
+    _repos_fetch; echo ""; _repos_clear; echo ""; _repos_status
+}
+
 _repos_wip_record() {
     local records_file="$1" repo_name="$2" repo_rel="$3" branch="$4" \
           default_branch="$5" dirty_count="$6" unmerged="$7" merged="$8"
@@ -898,7 +968,7 @@ _repos_dispatch() {
         view)           _repos_view "$2" ;;
         work)           _repos_view "$2" ; _repos_edit "$2" ;;
         fetch)          _repos_fetch ;;
-        reset)          _repos_fetch; echo ""; _repos_clear; echo ""; _repos_status ;;
+        reset)          shift; _repos_reset "$@" ;;
         cache)          _repos_cache ;;
         clear)          shift; _repos_clear "$@" ;;
         status)         shift; _repos_status "$@" ;;

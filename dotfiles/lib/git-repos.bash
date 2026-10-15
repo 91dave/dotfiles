@@ -29,7 +29,7 @@ _fzf_complete_repos() {
                 return
             fi
             ;&
-        find|code|cmd|cd|resolve|claude|cc|edit|ide|vs|view|work)
+        find|code|cmd|cd|resolve|claude|cc|edit|ide|vs|view|work|reset)
             local -a matches
             mapfile -t matches < <(grep -- "$cur" "$REPO_CACHE")
 
