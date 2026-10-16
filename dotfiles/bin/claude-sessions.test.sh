@@ -124,6 +124,68 @@ check "a structured-array slash command has no turns" "1" "$(turns_status "$f")"
 f="$(fixture no-content </dev/null)"
 check "an empty transcript has no turns" "1" "$(turns_status "$f")"
 
+echo "opening prompt"
+
+opening_prompt() {  # opening_prompt <transcript-path>
+    "$SUT" --opening-prompt "$1" 2>/dev/null
+}
+
+CLEAR='{"type":"user","message":{"role":"user","content":"<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n            <command-args></command-args>"}}'
+
+f="$(fixture cleared-then-asked <<EOF
+$CAVEAT
+$CLEAR
+{"type":"user","message":{"role":"user","content":"How does the masthead get updated?"}}
+EOF
+)"
+check "a prompt after /clear is the opening prompt" "How does the masthead get updated?" "$(opening_prompt "$f")"
+
+f="$(fixture cleared-then-skill <<EOF
+$CAVEAT
+$CLEAR
+{"type":"user","message":{"role":"user","content":"<command-message>qtx-logs</command-message>\n<command-name>/qtx-logs</command-name>\n<command-args>find the gateway errors</command-args>"}}
+{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Base directory for this skill: /skills/qtx-logs"}]}}
+EOF
+)"
+check "a skill invocation is shown as typed" "/qtx-logs find the gateway errors" "$(opening_prompt "$f")"
+
+f="$(fixture skill-multiline-args <<EOF
+{"type":"user","message":{"role":"user","content":"<command-name>/qtx-logs</command-name>\n<command-args>errors in the gateway\n\nsince Tuesday</command-args>"}}
+EOF
+)"
+check "multi-line skill arguments are kept" "$(printf '/qtx-logs errors in the gateway\n\nsince Tuesday')" "$(opening_prompt "$f")"
+
+f="$(fixture skill-no-args <<EOF
+$CAVEAT
+{"type":"user","message":{"role":"user","content":"<command-name>/wip</command-name>\n<command-args></command-args>"}}
+{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Base directory for this skill: /skills/wip"}]}}
+EOF
+)"
+check "a skill invoked without arguments is shown by name" "/wip" "$(opening_prompt "$f")"
+
+f="$(fixture model-then-asked <<EOF
+$CAVEAT
+{"type":"user","message":{"role":"user","content":"<command-name>/model</command-name>\n<command-args></command-args>"}}
+{"type":"user","message":{"role":"user","content":"<local-command-stdout>Set model to opus</local-command-stdout>"}}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"tidy up the cache layer"}]}}
+EOF
+)"
+check "a local command with output is skipped" "tidy up the cache layer" "$(opening_prompt "$f")"
+
+f="$(fixture only-cleared <<EOF
+$CAVEAT
+$CLEAR
+EOF
+)"
+check "a /clear-only session has no opening prompt" "" "$(opening_prompt "$f")"
+
+f="$(fixture truncated <<EOF
+{"type":"user","message":{"role":"user","content":"first ask"}}
+{"type":"user","message":{"role
+EOF
+)"
+check "a half-written line does not hide the opening prompt" "first ask" "$(opening_prompt "$f")"
+
 echo "listing"
 
 CONFIG="$FIXTURES/config"
@@ -163,6 +225,111 @@ rm -f "$CONFIG/sessions/live.json"
 printf '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}\n' \
     >> "$CONFIG/projects/-tmp-proj/$DEAD.jsonl"
 check "a session that gained a turn comes back" "1" "$(listing | wc -l)"
+
+SKILLED=bbbbbbbb-0000-0000-0000-0000000skill
+cat > "$CONFIG/projects/-tmp-proj/$SKILLED.jsonl" <<EOF
+$CAVEAT
+{"type":"user","cwd":"/tmp/proj","gitBranch":"main","message":{"role":"user","content":"<command-name>/clear</command-name>\n<command-args></command-args>"}}
+{"type":"user","cwd":"/tmp/proj","gitBranch":"main","message":{"role":"user","content":"<command-name>/qtx-logs</command-name>\n<command-args>find the gateway errors</command-args>"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Searching."}]}}
+EOF
+contains "an untitled session is listed by the skill it opened with" \
+    "/qtx-logs find the gateway errors" "$(listing | rg -F "$SKILLED")"
+
+out="$(env PATH="$SHIM:$PATH" CLAUDE_CONFIG_DIR="$CONFIG" AGENT_STATE_DIR="$STATE" \
+    XDG_CACHE_HOME="$FIXTURES/cache" "$SUT" --preview "$SKILLED" /tmp/proj 2>&1)"
+contains "and previewed with it as the opening prompt" "/qtx-logs find the gateway errors" "$out"
+lacks "not the command caveat" "local-command-caveat" "$out"
+rm -f "$CONFIG/projects/-tmp-proj/$SKILLED.jsonl"
+
+echo "search text"
+
+MASTHEAD=cccccccc-0000-0000-0000-00000masthead
+GATEWAY=dddddddd-0000-0000-0000-000000gateway
+cat > "$CONFIG/projects/-tmp-proj/$MASTHEAD.jsonl" <<EOF
+{"type":"user","cwd":"/tmp/proj","gitBranch":"main","message":{"role":"user","content":"How does the masthead get updated when we publish?"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Looking."}]}}
+{"type":"ai-title","aiTitle":"Masthead publishing"}
+{"type":"summary","summary":"Traced the publish orchestrator"}
+{"type":"last-prompt","lastPrompt":"check the swap and drop step"}
+EOF
+cat > "$CONFIG/projects/-tmp-proj/$GATEWAY.jsonl" <<EOF
+{"type":"user","cwd":"/tmp/proj","gitBranch":"main","message":{"role":"user","content":"<command-name>/qtx-logs</command-name>\n<command-args>gateway errors</command-args>"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Searching."}]}}
+EOF
+
+row="$(listing | rg -F "$MASTHEAD" | cut -f1)"
+contains "a row can be found by its opening prompt" "masthead get updated" "$row"
+contains "by where it left off" "swap and drop" "$row"
+contains "and by its compaction summary" "publish orchestrator" "$row"
+
+echo "ask"
+
+cat > "$SHIM/claude" <<EOF
+#!/bin/bash
+printf '%s\n' "\$@" > "$FIXTURES/claude-args"
+cat > "$FIXTURES/claude-stdin"
+[[ -n "\${STUB_CLAUDE_FAIL:-}" ]] && exit 1
+printf '%b' "\${STUB_CLAUDE_REPLY:-}"
+EOF
+chmod +x "$SHIM/claude"
+
+asking() {  # asking <question> [reply]  -- rows the ask mode would show
+    rm -rf "$FIXTURES/cache"
+    env PATH="$SHIM:$PATH" CLAUDE_CONFIG_DIR="$CONFIG" XDG_CACHE_HOME="$FIXTURES/cache" \
+        XDG_DATA_HOME="$FIXTURES/data" AGENT_STATE_DIR="$STATE" STUB_CLAUDE_REPLY="${2:-}" \
+        "$SUT" --ask "$1" 2>/dev/null
+}
+
+out="$(asking "where did the header publishing go" "$GATEWAY\nnot-a-session\n$MASTHEAD\n$GATEWAY\n")"
+check "sessions come back in the order Claude ranked them" "$GATEWAY $MASTHEAD" "$(cut -f2 <<<"$out" | xargs)"
+contains "the question is sent to Claude" "where did the header publishing go" "$(cat "$FIXTURES/claude-stdin")"
+contains "with each session's details" "swap and drop" "$(cat "$FIXTURES/claude-stdin")"
+contains "without saving the ranking call as a session" "--no-session-persistence" "$(cat "$FIXTURES/claude-args")"
+
+out="$(asking "nothing like this" "")"
+check "no matches gives a single row" "1" "$(wc -l <<<"$out")"
+contains "that says so" "no matching sessions" "$out"
+check "and cannot be resumed" "" "$(cut -f2 <<<"$out")"
+
+out="$(STUB_CLAUDE_FAIL=1 asking "anything")"
+contains "a failed call says so" "ask failed" "$out"
+check "in a row that cannot be resumed" "" "$(cut -f2 <<<"$out")"
+
+rm -f "$CONFIG/projects/-tmp-proj/$MASTHEAD.jsonl" "$CONFIG/projects/-tmp-proj/$GATEWAY.jsonl"
+
+echo "modes"
+
+event() {  # event <prompt> <query> <event>  -- the fzf actions an event turns into
+    env FZF_PROMPT="$1" FZF_QUERY="$2" "$SUT" --fzf-event "$3" 2>/dev/null
+}
+
+out="$(event 'session> ' '' toggle)"
+contains "ctrl-s in filter mode switches to ask mode" "change-prompt(ask> )" "$out"
+contains "which stops fzf filtering as you type" "disable-search" "$out"
+
+out="$(event 'ask> ' 'half a question' toggle)"
+contains "ctrl-s in ask mode switches back to filter mode" "change-prompt(session> )" "$out"
+contains "turning filtering back on" "enable-search" "$out"
+contains "over every session" "--list" "$out"
+
+out="$(event 'session> ' '?masthead' change)"
+contains "a leading ? switches to ask mode" "change-prompt(ask> )" "$out"
+contains "and is dropped from the question" "change-query:masthead" "$out"
+
+contains "a leading ? in ask mode switches back" "change-prompt(session> )" \
+    "$(event 'ask> ' '?' change)"
+check "other typing changes nothing" "" "$(event 'session> ' 'mast' change)"
+check "nor does a ? later in a question" "" "$(event 'ask> ' 'why?' change)"
+
+check "enter in filter mode picks the session" "print(enter)+accept" "$(event 'session> ' 'mast' enter)"
+check "as does alt-enter" "print(alt-enter)+accept" "$(event 'session> ' '' alt-enter)"
+
+out="$(event 'ask> ' 'header publishing' enter)"
+contains "enter in ask mode runs the question" "--ask {q}" "$out"
+contains "and returns to filter mode over the answers" "enable-search" "$out"
+contains "naming the question they answer" "header publishing" "$out"
+check "enter with no question does nothing" "" "$(event 'ask> ' '' enter)"
 
 echo "jump"
 

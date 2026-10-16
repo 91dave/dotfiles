@@ -80,38 +80,50 @@ block_session() {  # block_session <id>  -- record id in blocklist, transcript k
     printf '%s\n' "$id" >> "$BLOCKLIST"
 }
 
-# Extract cwd, gitBranch and opening prompt (tab-separated) from the first user
-# line. Handles content as a plain string or a structured array.
-first_user_fields() {
-    jq -r '[
-        .cwd // "?",
-        .gitBranch // "?",
-        (if (.message.content | type) == "string"
-            then .message.content
-            else ([.message.content[]? | select(.type=="text") | .text] | first // "")
-         end)
-    ] | @tsv'
+first_user_fields() {  # cwd and gitBranch (tab-separated) from the first user line
+    jq -r '[.cwd // "?", .gitBranch // "?"] | @tsv'
 }
 
-# Reduce a no-title fallback prompt to something readable: drop command/tag
-# wrappers and skip the injected "Caveat:" preamble, keeping the first real line.
-clean_fallback() {
-    printf '%s\n' "$1" | sed 's/\\n/\n/g; s/\\t/ /g; s/<[^>]*>//g' \
-        | awk 'NF && $0 !~ /^[[:space:]]*Caveat:/ { print; exit }'
+opening_prompt() {  # opening_prompt <transcript-path>  -- first real ask, slash commands as typed
+    jq -nrR '
+        def text: if (.message.content | type) == "string" then .message.content
+                  else ([.message.content[]? | select(.type=="text") | .text] | first // "") end;
+        def as_typed:
+            (capture("<command-name>(?<n>[^<]*)</command-name>").n) as $name
+            | ((capture("<command-args>(?<a>[\\s\\S]*?)</command-args>").a) // "") as $args
+            | "\($name) \($args)" | rtrimstr(" ");
+        [limit(50; inputs | fromjson? | select(.type == "user"))] as $u
+        | first(range(0; $u | length) as $i
+            | $u[$i] | select((.isMeta // false) | not) | text
+            | select(. != "" and (startswith("<local-command") | not))
+            | if test("<command-name>") then
+                select(($u[$i + 1] // {} | text | startswith("<local-command-stdout>")) | not)
+                | as_typed | select(test("^/clear( |$)") | not)
+              else . end) // ""' "$1" 2>/dev/null
+}
+
+search_text() {  # search_text <transcript-path> <opening prompt>  -- one line of what it was about
+    local last summaries text
+    last="$(rg '"type":"last-prompt"' "$1" 2>/dev/null | tail -1 | jq -r '.lastPrompt // empty')"
+    summaries="$(rg '"type":"summary"' "$1" 2>/dev/null | jq -r '.summary // empty')"
+    text="$(printf '%s %s %s' "$2" "$summaries" "$last" | tr -d '\033' | tr -s '[:space:]' ' ')"
+    printf '%s' "${text:0:400}"
 }
 
 compute_fields() {
     local path="$1" first cwd branch prompt title proj turns
     first="$(rg -m1 '"type":"user"' "$path" 2>/dev/null)"
     [[ -n "$first" ]] || return 1
-    IFS=$'\t' read -r cwd branch prompt < <(printf '%s' "$first" | first_user_fields)
+    IFS=$'\t' read -r cwd branch < <(printf '%s' "$first" | first_user_fields)
+    prompt="$(opening_prompt "$path")"
     title="$(rg '"type":"ai-title"' "$path" 2>/dev/null | tail -1 | jq -r '.aiTitle // empty')"
-    [[ -n "$title" ]] || title="$(clean_fallback "$prompt")"
+    [[ -n "$title" ]] || title="$(awk 'NF { print; exit }' <<<"$prompt")"
     [[ -n "$title" ]] || title="(untitled)"
     title="${title//$'\t'/ }"
     proj="${cwd##*/}"
     if has_turns "$path"; then turns=1; else turns=0; fi
-    printf '%s\t%s\t%s\t%s\t%s' "$cwd" "$branch" "$proj" "$title" "$turns"
+    printf '%s\t%s\t%s\t%s\t%s\t%s' "$cwd" "$branch" "$proj" "$title" "$turns" \
+        "$(search_text "$path" "$prompt")"
 }
 
 # A per-transcript cache keyed on file mtime keeps repeat runs fast: only new or
@@ -120,7 +132,8 @@ compute_fields() {
 build_list() {
     need jq rg
     local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/claude-sessions"
-    local cache="$cache_dir/cache.tsv"
+    local cache="$cache_dir/cache-v3.tsv"
+    rm -f "$cache_dir/cache.tsv" "$cache_dir/cache-v2.tsv"
     mkdir -p "$cache_dir" 2>/dev/null
 
     local markers; markers="$(live_sessions)"
@@ -131,11 +144,11 @@ build_list() {
         [[ -n "$lid" ]] && LIVE_PID["$lid"]="$lpid"
     done <<<"$markers"
     if [[ -f "$cache" ]]; then
-        local cm cid ccwd cbranch cproj ctitle cturns
-        while IFS=$'\t' read -r cm cid ccwd cbranch cproj ctitle cturns; do
+        local cm cid ccwd cbranch cproj ctitle cturns ctext
+        while IFS=$'\t' read -r cm cid ccwd cbranch cproj ctitle cturns ctext; do
             [[ -n "$cid" && -n "$cturns" ]] || continue
             CM["$cid"]="$cm"
-            CR["$cid"]="$ccwd"$'\t'"$cbranch"$'\t'"$cproj"$'\t'"$ctitle"$'\t'"$cturns"
+            CR["$cid"]="$ccwd"$'\t'"$cbranch"$'\t'"$cproj"$'\t'"$ctitle"$'\t'"$cturns"$'\t'"$ctext"
         done < "$cache"
     fi
     if [[ -f "$BLOCKLIST" ]]; then
@@ -146,7 +159,7 @@ build_list() {
     fi
 
     local tmp; tmp="$(mktemp)"
-    local mtime path id fields cwd branch proj title turns date live_mark pane display
+    local mtime path id fields cwd branch proj title turns text date live_mark pane display
     stat -c '%Y %n' "$PROJECTS_DIR"/*/*.jsonl 2>/dev/null | sort -rn | \
     while read -r mtime path; do
         [[ -s "$path" ]] || continue
@@ -159,7 +172,7 @@ build_list() {
         [[ -n "$fields" ]] || continue
         printf '%s\t%s\t%s\n' "$mtime" "$id" "$fields" >> "$tmp"
         [[ -n "${BL[$id]:-}" ]] && continue
-        IFS=$'\t' read -r cwd branch proj title turns <<<"$fields"
+        IFS=$'\t' read -r cwd branch proj title turns text <<<"$fields"
         [[ "$turns" == 1 ]] || is_live "$id" "$live" || continue
         printf -v date '%(%Y-%m-%d %H:%M)T' "$mtime"
         pane=""
@@ -169,11 +182,96 @@ build_list() {
         else
             live_mark=" "
         fi
-        printf -v display '%-16s %1s  %-60.60s  %-20.20s  %s' \
-            "$date" "$live_mark" "$title" "$proj" "$branch"
+        printf -v display '%-16s %1s  %-60.60s  %-20.20s  %s  \e[2m%s\e[0m' \
+            "$date" "$live_mark" "$title" "$proj" "$branch" "$text"
         printf '%s\t%s\t%s\t%s\n' "$display" "$id" "$cwd" "$pane"
     done
     mv -f "$tmp" "$cache" 2>/dev/null || rm -f "$tmp"
+}
+
+ASK_INSTRUCTIONS="You find the user's past Claude Code sessions. You are given a question and a list \
+of sessions, one per line: the session id, a tab, then when it was last active, its title, project, \
+branch and what it was about. Reply with the ids of the sessions that answer the question, most \
+relevant first, one per line, at most 15. Reply with ids only. If none fit, reply with nothing."
+
+no_answer() {  # no_answer <message>  -- a row that explains, and cannot be resumed
+    printf '  %s\t\t\t\n' "$1"
+}
+
+ask_claude() {  # ask_claude <question> <candidates>  -- the model's reply
+    local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/claude-sessions"
+    mkdir -p "$cache_dir" 2>/dev/null
+    printf 'Today is %s.\n\nQuestion: %s\n\nSessions:\n%s\n' "$(date +%F)" "$1" "$2" \
+        | ( cd "$cache_dir" && timeout 120 claude -p --model "${CLAUDE_SESSIONS_ASK_MODEL:-haiku}" \
+            --no-session-persistence --tools "" --strict-mcp-config --setting-sources project \
+            --system-prompt "$ASK_INSTRUCTIONS" )
+}
+
+ask_sessions() {  # ask_sessions <question>  -- --list rows, most relevant first
+    need claude
+    local question="$1" rows line id candidates reply found=0
+    declare -A ROW SHOWN
+    rows="$(build_list)"
+    while IFS= read -r line; do
+        id="$(cut -f2 <<<"$line")"
+        [[ -n "$id" ]] || continue
+        ROW["$id"]="$line"
+        candidates+="$id"$'\t'"$(cut -f1 <<<"$line" | sed 's/\x1b\[[0-9;]*m//g' | tr -s ' ')"$'\n'
+    done <<<"$rows"
+    if ! reply="$(ask_claude "$question" "$candidates")"; then
+        no_answer "ask failed: claude did not answer"
+        return 0
+    fi
+    while IFS= read -r id; do
+        [[ -n "${ROW[$id]:-}" && -z "${SHOWN[$id]:-}" ]] || continue
+        SHOWN["$id"]=1
+        printf '%s\n' "${ROW[$id]}"
+        found=1
+    done < <(rg -o '[0-9A-Za-z-]{8,}' <<<"$reply")
+    (( found )) || no_answer "no matching sessions for: $question"
+}
+
+FILTER_PROMPT='session> '
+ASK_PROMPT='ask> '
+ASK_HEADER='ask: describe the session, enter to search   •   ctrl-s or ?: back to filtering'
+
+filter_header() {
+    local default other
+    default="${CLAUDE_SESSIONS_DEFAULT:-resume}"
+    [[ "$default" == "fork" ]] && other="resume" || other="fork"
+    [[ "$default" == "resume" ]] && default="attach or resume"
+    printf 'enter: %s   •   alt-enter: %s   •   alt-e: end   •   alt-d: delete   •   ctrl-s or ?: ask   •   ● = live' \
+        "$default" "$other"
+}
+
+switch_mode() {  # switch_mode <asking 0|1> [query to keep]  -- fzf actions to flip filter/ask mode
+    if (( $1 )); then
+        printf 'enable-search+change-prompt(%s)+change-ghost()+change-header(%s)' \
+            "$FILTER_PROMPT" "$(filter_header)"
+    else
+        printf 'disable-search+change-prompt(%s)+change-ghost(describe the session, then enter)+change-header(%s)' \
+            "$ASK_PROMPT" "$ASK_HEADER"
+    fi
+    printf '+reload(%s --list)' "$SELF"
+    (( $# > 1 )) || return 0
+    if [[ -n "$2" ]]; then printf '+change-query:%s' "$2"; else printf '+clear-query'; fi
+}
+
+fzf_event() {  # fzf_event <toggle|change|enter|alt-enter>  -- actions for the mode in $FZF_PROMPT
+    local query="${FZF_QUERY:-}" asking=0
+    [[ "${FZF_PROMPT:-}" == "$ASK_PROMPT" ]] && asking=1
+    case "$1" in
+        toggle) switch_mode "$asking" ;;
+        change) [[ "$query" == \?* ]] && switch_mode "$asking" "${query#\?}" ;;
+        enter|alt-enter)
+            if (( ! asking )); then
+                printf 'print(%s)+accept' "$1"
+            elif [[ -n "$query" ]]; then
+                printf 'reload(%s --ask {q})+enable-search+change-prompt(%s)+change-ghost()+clear-query+change-header:%s' \
+                    "$SELF" "$FILTER_PROMPT" "ranked for: $query   •   ctrl-s twice: all sessions"
+            fi ;;
+    esac
+    return 0
 }
 
 render_pager() {  # reads markdown on stdin, renders it for the preview pane
@@ -196,6 +294,7 @@ render_preview() {  # render_preview <id> <cwd> [live pane]
 
     need jq rg
     local id="$1" cwd="${2:-}"
+    [[ -n "$id" ]] || return 0
 
     local matches=( "$PROJECTS_DIR"/*/"$id.jsonl" )
     local path="${matches[0]}"
@@ -205,7 +304,7 @@ render_preview() {  # render_preview <id> <cwd> [live pane]
     first="$(rg -m1 '"type":"user"' "$path" 2>/dev/null)"
     start="$(printf '%s' "$first" | jq -r '.timestamp // ""')"
     branch="$(printf '%s' "$first" | jq -r '.gitBranch // "?"')"
-    prompt="$(printf '%s' "$first" | jq -r 'if (.message.content | type)=="string" then .message.content else ([.message.content[]? | select(.type=="text") | .text] | first // "") end')"
+    prompt="$(opening_prompt "$path")"
     title="$(rg '"type":"ai-title"' "$path" 2>/dev/null | tail -1 | jq -r '.aiTitle // empty')"
     lastp="$(rg '"type":"last-prompt"' "$path" 2>/dev/null | tail -1 | jq -r '.lastPrompt // empty')"
     msgs="$(rg -c '"type":"user"|"type":"assistant"' "$path" 2>/dev/null || echo 0)"
@@ -347,18 +446,17 @@ do_jump_action() {  # do_jump_action <key> <id> <cwd>
 
 interactive() {  # interactive [jump]
     need fzf jq rg
-    local mode="${1:-}" default other header out key line id cwd
-    default="${CLAUDE_SESSIONS_DEFAULT:-resume}"
-    [[ "$default" == "fork" ]] && other="resume" || other="fork"
-    [[ "$default" == "resume" ]] && default="attach or resume"
-    header="enter: $default   •   alt-enter: $other   •   alt-e: end   •   alt-d: delete   •   ● = live"
+    local mode="${1:-}" out key line id cwd
 
     out="$(build_list | fzf \
         --ansi --delimiter '\t' --with-nth 1 \
-        --layout=reverse \
-        --expect=enter,alt-enter \
-        --prompt 'session> ' \
-        --header "$header" \
+        --layout=reverse --no-hscroll --exact \
+        --prompt "$FILTER_PROMPT" \
+        --header "$(filter_header)" \
+        --bind "enter:transform:$SELF --fzf-event enter" \
+        --bind "alt-enter:transform:$SELF --fzf-event alt-enter" \
+        --bind "ctrl-s:transform:$SELF --fzf-event toggle" \
+        --bind "change:transform:$SELF --fzf-event change" \
         --bind "alt-e:execute-silent($SELF --end {2})+reload($SELF --list)" \
         --bind "alt-d:execute-silent($SELF --block {2})+reload($SELF --list)" \
         --bind 'focus:transform:[[ -n {4} ]] && echo change-preview-window:nowrap || echo change-preview-window:wrap' \
@@ -369,6 +467,7 @@ interactive() {  # interactive [jump]
     line="$(sed -n '2p' <<<"$out")"
     [[ -n "$line" ]] || exit 0
     id="$(cut -f2 <<<"$line")"
+    [[ -n "$id" ]] || exit 0
     cwd="$(cut -f3 <<<"$line")"
     if [[ "$mode" == "jump" ]]; then
         do_jump_action "$key" "$id" "$cwd"
@@ -396,7 +495,14 @@ Keys (interactive):
   alt-enter    run the other action
   alt-e        end a live session (remove its live marker)
   alt-d        delete a session from the picker (adds it to the blocklist)
+  ctrl-s or ?  switch between filtering and asking (a ? typed at the start toggles)
   ● in a row   the session is currently live (open in another process)
+
+Filtering matches the title, project, branch, opening prompt, compaction summaries
+and last prompt. Terms match exactly as substrings: 'word' matches a whole word,
+and a single leading ' makes that term fuzzy. Asking sends your question and that same text for every session to
+Claude (Haiku by default), then lists the sessions it ranks as relevant; enter on a
+result resumes it as usual.
 
 A session that is still running is never resumed a second time: one in a tmux pane
 is attached to where it already is, and one running outside tmux is refused (fork
@@ -410,6 +516,7 @@ picker on prefix a.
 Environment:
   CLAUDE_SESSIONS_DEFAULT   resume (default) | fork  -- which action enter runs
   CLAUDE_SESSIONS_DRYRUN    if set, print the commands instead of running them
+  CLAUDE_SESSIONS_ASK_MODEL model used to answer questions (default haiku)
   CLAUDE_CONFIG_DIR         override the Claude config dir (default ~/.claude)
 
 Files:
@@ -429,6 +536,9 @@ case "${1:-}" in
     --end)         end_session "${2:-}" ;;                   # internal: fzf bind
     --block)       block_session "${2:-}" ;;                 # internal: fzf bind
     --has-turns)   need jq rg; has_turns "${2:-}" ;;         # internal: test entry
+    --opening-prompt) need jq; opening_prompt "${2:-}" ;;    # internal: test entry
+    --ask)         ask_sessions "${2:-}" ;;                  # internal: fzf bind
+    --fzf-event)   fzf_event "${2:-}" ;;                     # internal: fzf bind
     --resumes-running) need jq; shift; resumes_running "$@" ;;  # internal: cc guard
     --attach-running)  need jq tmux; attach_to_running "${2:-}" ;;  # internal: cc guard
     --help|-h)     usage ;;
