@@ -102,4 +102,4 @@ pwsh.exe -File "C:/Code/scripts/helper.ps1"                  # ✓
 pwsh.exe -File "$USERPROFILE_WIN/.claude/skills/helper.ps1"  # ✓
 ```
 
-@CLAUDE-template.md --exclude "## Technology Choices" --exclude "## Architecture" --exclude "### Planning and Execution" --exclude "## Testing Strategy"
+@CLAUDE-template.md --exclude "## Technology Choices" --exclude "## Architecture" --exclude "### Planning and Execution" --exclude "## Testing Strategy" --swap "### Regression Testing" regression.md
