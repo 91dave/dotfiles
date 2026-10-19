@@ -60,6 +60,20 @@ template, which lives in the separate **`docs-claude-helpers`** repo, not here.
 `sync-agents.sh` resolves that include from `$CLAUDE_ORG_REPO` at build time, so the work
 content is folded into both `CLAUDE.md` and `AGENTS.md`.
 
+Any `@file.md` include line can take flags to tailor the included content:
+
+```markdown
+@CLAUDE-template.md --exclude "## Architecture" --swap "### Regression Testing" regression.md
+```
+
+- `--exclude "<heading>"` drops that section (heading plus everything up to the next
+  heading at the same or higher level).
+- `--swap "<heading>" <file.md>` replaces that section with the contents of `<file.md>`,
+  which carries its own heading. The file resolves like any include (local, then
+  `$CLAUDE_ORG_REPO`). If it's missing, the original section is kept with a warning.
+
+Headings match the whole line exactly, `#` count included. Flags can repeat and mix.
+
 > Work skills and `CLAUDE-template.md` belong to `docs-claude-helpers` and are out of
 > scope for this repo — they are only *referenced*, never copied or committed here.
 
