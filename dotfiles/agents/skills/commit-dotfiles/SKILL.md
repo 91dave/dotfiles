@@ -87,7 +87,7 @@ Review the diff against the areas below and tell the user which pages look stale
 | `bin/web` and other `bin/` scripts | `docs/tools.md` |
 | `pi/` settings, extensions, themes | `docs/pi.md` |
 | `agents/` template, includes, skills | `docs/agents.md` |
-| `bash.sh`, `atuin/`, history and fzf config | `docs/shell.md`, `README.md` |
+| `bash.sh`, `lib/shell.sh`, history and fzf config | `docs/shell.md`, `README.md` |
 | aliases, `ce`, .NET and NuGet helpers | `docs/dev.md` |
 | a new helper command or config variable | `README.md` quick reference |
 

@@ -44,7 +44,6 @@ sudo mv ansi /usr/local/bin/
 Comprehensive documentation for all helper functions and aliases is available in the [docs/](docs/) folder.
 
 **Quick reference:**
-- `atuin_help` - atuin install and usage notes
 - `aws_help` - AWS helpers
 - `cc [args]` - Launch Claude Code in a dedicated tmux session named after the current folder (requires tmux). If the folder has an `AGENTS.md`, auto-creates a `CLAUDE.md` importing it (`@AGENTS.md`) and hides that bridge via the local git exclude so Claude reads the repo's agent instructions without dirtying the tree
 - `agents` - Jump to any AI agent pane in any tmux session, waiting ones first. Agent hooks stamp their state onto their tmux pane, so the status bar shows which sessions need you and window tabs colour by agent state ([docs](docs/tmux.md))
@@ -65,9 +64,7 @@ Comprehensive documentation for all helper functions and aliases is available in
 
 **Configuration variables:**
 - `BASH_DEBUG` - Set to enable debug output during shell loading
-- `HISTORY_ATUIN` - Capture shell history into atuin, and run its daemon (`shell_help` shows the current value)
-- `HISTORY_SEARCH` - CTRL+r interface: `default`, `fzf` or `atuin`
-- `HISTORY_ATUIN_PTY` - Enable atuin's experimental pty-proxy
+- `HISTORY_SEARCH` - CTRL+r interface: `default` or `fzf` (`shell_help` shows the current value)
 - `SHOW_DAILY_TIPS=true` - Show daily tips on shell startup (default: true)
 - `WARN_MISSING_HELPERS=true` - Warn about missing helper utilities (default: true)
 
