@@ -1,0 +1,9 @@
+{
+  "tmux": "auto",
+  "commands": {
+    "livePane": "agent-state pane {pid}",
+    "attach": "agent-state jump {pane}",
+    "reviveTmux": "tmux new-session -d -s {tmuxName} -c {cwd} {claude} && tmux-sessions --attach {tmuxName}",
+    "previewRunning": "agent-state preview {pane}"
+  }
+}

@@ -20,7 +20,9 @@ by `install.sh`. Prefix is `Ctrl+w`, not the default `Ctrl+b`.
 
 ## Session helpers
 
-Five fzf pickers, all with previews:
+Five pickers, all with previews. Four are fzf scripts in `dotfiles/bin`; `claude-sessions` is a
+separate Go tool, [91dave/claude-sessions](https://github.com/91dave/claude-sessions), which
+`install.sh` downloads from its latest release:
 
 | Command | Alias | Lists |
 |---------|-------|-------|
@@ -70,13 +72,23 @@ with the context. Liveness comes from the session marker Claude writes at
 `~/.claude/sessions/<pid>.json`, which records the pane as `cc-dotfiles:@1.%1`. A marker only
 counts while its pid is still running, so one left behind by a killed session is resumed as
 normal. Each marker is read on its own, because Claude rewrites them on every status change and
-a single half-written file read in one `jq` pass would hide every marker after it, making a
-running session look finished.
+a single half-written file read in one pass would hide every marker after it, making a running
+session look finished.
 
-The attach itself is delegated, not reimplemented: `agent-state jump` selects the window and
-pane and hands the session to `tmux-sessions --attach`, so the takeover rules under *One
-terminal per session* apply unchanged, and a finished agent is acknowledged on arrival.
-`alt-enter` still forks, which always means a new session, since a fork is a new transcript.
+The attach itself is delegated, not reimplemented. `claude-sessions` knows nothing of this tmux
+setup; [`dotfiles/claude-sessions/config.json`](../dotfiles/claude-sessions/config.json), linked
+to `~/.config/claude-sessions/config.json`, hands its steps to the tools here:
+
+| Step | Command |
+|------|---------|
+| Go to a running session | `agent-state jump {pane}`: selects the window and pane and hands the session to `tmux-sessions --attach`, so the takeover rules under *One terminal per session* apply unchanged, and a finished agent is acknowledged on arrival |
+| Resume in a new session (`--jump`, or `cs` outside tmux) | `tmux new-session -d …` then `tmux-sessions --attach` |
+| Find a running session's pane | `agent-state pane {pid}` |
+| Preview a running session | `agent-state preview {pane}` |
+
+`"tmux": "auto"` gives `cs` its two behaviours: inside tmux it resumes in the pane you are in,
+outside tmux it opens a `cc-<folder>` session. `alt-enter` (or `ctrl+o`) still forks, which with
+`--jump` always means a new session, since a fork is a new transcript.
 
 ### Previewing a running session
 
@@ -85,45 +97,22 @@ picker uses, in place of the transcript summary. You are choosing between sessio
 doing something right now, so what one is doing beats what it was started to do. A past
 session keeps the summary, since it has no pane to show.
 
-The pane reaches the picker through the list, not the preview: `build_list` resolves every
-live row to `<marker pid>` → `agent-state pane` → a pane that is still alive, and emits it as
-a fourth column. So the preview is handed the pane rather than finding it, and the row knows
-whether it is previewing a pane before the preview runs. Three conditions have to hold, and
-any one of them failing falls back to the transcript: a live marker, an agent-state file for
-that pid, and a pane that still exists. An agent running outside tmux therefore keeps the
-summary, which is the only thing it can show.
+The pane is resolved when the list is built, not when the preview runs: each running row goes
+`<marker pid>` → `agent-state pane` → a pane that is still alive. Three conditions have to
+hold, and any one of them failing falls back to the transcript: a live marker, an agent-state
+file for that pid, and a pane that still exists. An agent running outside tmux therefore keeps
+the summary, which is the only thing it can show.
 
-Knowing at list time is what fixes wrapping. A pane capture is already hard-wrapped to its
-own pane's width, so soft-wrapping it again into a 55% preview breaks every line twice and
-the agent's UI with it. Prose has the opposite need: truncated at the edge, a long prompt
-loses its tail. fzf cannot set the preview window per row, but it can react to the row:
-
-```
---bind 'focus:transform:[[ -n {4} ]] && echo change-preview-window:nowrap || echo change-preview-window:wrap'
-```
-
-A spec given to `change-preview-window` is applied over the original `--preview-window`, so
-`right,55%` survives and only the wrap flag moves.
-
-There is no header above the pane. Title, project and branch are on the highlighted row an
-inch to the left, and the agent's own status line repeats the folder and branch anyway. The
-header cost a `bat` render and a cache lookup to say what was already on screen twice.
-
-The preview is the one thing that runs on every keystroke, so it is worth the arithmetic:
-
-| | Per render |
-|---|---|
-| Transcript summary | ~90 ms, of which four `rg` passes over a transcript that grows all session |
-| Live pane | ~45 ms, flat: one `tmux` liveness check, then `exec` into `agent-state preview` |
-
-`exec` rather than a call, since nothing follows it. Two bash starts on `/mnt/c` are most of
-what is left. Resolving the pane costs the list build ~17 ms per live row, once per open.
+The pane capture is shown unwrapped, cut at the preview's edge. It is already hard-wrapped to
+its own pane's width, so wrapping it again would break every line twice and the agent's UI with
+it. The transcript summary is the opposite, and is wrapped so a long prompt keeps its tail.
 
 `claude-sessions` hides sessions that never got a turn, so a window opened only to run
 `/login` or `/clear` never reaches the picker. A session counts as having a turn once it
 holds an agent reply, or a prompt of your own beyond slash-command plumbing, so one
 interrupted before the first reply is still listed. A live session is always listed
-whatever its state, and `bash dotfiles/bin/claude-sessions.test.sh` covers the rules.
+whatever its state. The claude-sessions repo's tests cover these rules, including the original
+bash suite from this repo, which now runs against the Go binary.
 
 ## Agent state
 

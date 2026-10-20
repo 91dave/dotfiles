@@ -73,13 +73,22 @@ bash "$DF/agents/sync-agents.sh"
 echo "bin scripts..."
 link bin/repos           "$HOME/.local/bin/repos"
 link bin/web             "$HOME/.local/bin/web"
-link bin/claude-sessions "$HOME/.local/bin/claude-sessions"
 link bin/pi-sessions     "$HOME/.local/bin/pi-sessions"
 link bin/tmux-sessions   "$HOME/.local/bin/tmux-sessions"
 link bin/tmux-windows    "$HOME/.local/bin/tmux-windows"
 link bin/tmux-pick       "$HOME/.local/bin/tmux-pick"
 link bin/agent-state     "$HOME/.local/bin/agent-state"
 link bin/mdserve         "$HOME/.local/bin/mdserve"
+
+echo "claude-sessions (latest release of github.com/91dave/claude-sessions)..."
+link claude-sessions/config.json "$HOME/.config/claude-sessions/config.json"
+[ -L "$HOME/.local/bin/claude-sessions" ] && rm -f "$HOME/.local/bin/claude-sessions"
+if curl -fsSL https://raw.githubusercontent.com/91dave/claude-sessions/main/install.sh \
+    | CLAUDE_SESSIONS_INSTALL_DIR="$HOME/.local/bin" sh | sed 's/^/  /'; then
+    :
+else
+    echo "  could not install claude-sessions; re-run ./install.sh once GitHub is reachable"
+fi
 
 if $REMOVE_BAK; then
     echo "Removing backups..."
