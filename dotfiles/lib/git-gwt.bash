@@ -297,13 +297,10 @@ _gwt_dispatch() {
             _gwt_help && return
         fi
 
-        local results=$(cat $REPO_CACHE | grep $search | wc -l)
-        echo "🔍 Found $results repos for '$search'"
-
-        [ "$results" = "1" ] || return
-
-        local result=$(cat $REPO_CACHE | grep $search)
-        pushd $REPO_HOME/$result >& /dev/null
+        local repo_path
+        repo_path=$(_repos_target_path "$search") || return
+        echo "🔍 Using $(_repos_label "$repo_path")"
+        pushd "$repo_path" >& /dev/null
 
         # Determine use_tag_format from flag
         local use_tag_format="false"
@@ -441,7 +438,8 @@ _fzf_complete_gwt() {
             ;;
         add|hadd|code|edit|claude)
             # Show repos from cache
-            selected=$(fzf --height=70% --layout=reverse --preview "$EZA_PREVIEW $REPO_HOME/{}" < "$REPO_CACHE")
+            selected=$(_repos_picker_list | fzf --height=70% --layout=reverse \
+                --delimiter='\t' --with-nth=1 --preview "$EZA_PREVIEW {2}" | cut -f1)
             ;;
         gadd)
             # Show groups from config (extract group names before '=')

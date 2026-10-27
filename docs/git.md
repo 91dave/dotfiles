@@ -14,25 +14,49 @@ REPO_HOME=$(wslpath $REPO_HOME_WIN)
 WORKTREE_HOME=$(wslpath $WORKTREE_HOME_WIN)
 WORKSPACE_HOME=$(wslpath $WORKSPACE_HOME_WIN)
 
+# Named roots scanned by repos cache, as name=path; list order breaks ties
+REPO_ROOTS="wsl=$HOME/repos win=$REPO_HOME"
+
+# Root used when a repo has copies in several roots (cd, resolve, claude, code, cmd)
+REPO_PREFER=wsl
+
+# Root used by Windows GUI apps (ide, view, work), which are slow or broken over \\wsl$
+REPO_PREFER_WINDOWS_APPS=win
+
+# State files live in WSL, outside every root
+REPO_STATE=$HOME/.local/state/repos
+
 # Repository cache file
-REPO_CACHE=$REPO_HOME/repos-cache.lst
+REPO_CACHE=$REPO_STATE/repos-cache.lst
 
 # WIP status snapshot (written by repos status)
-REPO_STATUS=$REPO_HOME/repos-status.json
+REPO_STATUS=$REPO_STATE/repos-status.json
 
 # Archived/readonly repos (written by repos cache)
-REPO_READONLY=$REPO_HOME/repos-readonly.lst
+REPO_READONLY=$REPO_STATE/repos-readonly.lst
 
 # Repository ignore file (optional)
-REPO_IGNORE=$REPO_HOME/.reposignore
+REPO_IGNORE=$REPO_STATE/.reposignore
 
 # Repository groups file (for gwt gadd)
-REPO_GROUPS=$REPO_HOME/repos-groups.cfg
+REPO_GROUPS=$REPO_STATE/repos-groups.cfg
 ```
+
+### Roots and copies
+
+`repos` manages repos across several roots: by default Windows (`/mnt/c/Code`, where Windows IDEs work well) and WSL native (`~/repos`, where WSL tools avoid the slow WSL to Windows filesystem bridge). The same repo can be cloned in both.
+
+- **Cache format.** Each cache line is `root<TAB>relpath<TAB>id<TAB>abspath`. The `id` is the `owner/name` from the origin remote (the folder name when there is no remote), so copies are linked even when their relative paths differ.
+- **Search terms** match the relative path only. Prefix a term with a root name to pick that copy: `repos cc win:documents`.
+- **Copies.** When a term matches one repo with copies in several roots, the `REPO_PREFER` copy is used and a warning listing the other copies goes to stderr, so `cd "$(repos resolve x)"` still works. Windows GUI commands use `REPO_PREFER_WINDOWS_APPS` instead.
+- **Exact names win.** When a term matches several repos but equals one repo's relative path or folder name exactly, that repo is chosen (`am-ui-applications` beats `am-ui-applications-barrels`).
+- **Bulk commands** (`fetch`, `clear`, `status`, `main`, `reset`) treat every copy as its own clone and tag output with the root, e.g. `📁 [wsl] am-ui-applications`.
+- Worktrees (folders whose `.git` is a file) are not cached in any root.
+- **Windows git for Windows repos.** Bulk commands run `git.exe` (when installed) for repos under `/mnt/<drive>`, because Linux git over the WSL 9P bridge is around 50x slower on large repos. Set `REPOS_WINDOWS_GIT=0` to use Linux git throughout. Linux and Windows git record different file metadata in the index, so the first command after switching between them in a repo is slow while the index is refreshed.
 
 ### .reposignore
 
-Create a `.reposignore` file in your `REPO_HOME` directory to exclude repositories from the cache.
+Create a `.reposignore` file in `REPO_STATE` to exclude repositories from the cache. Patterns are matched against each repo's path relative to its root.
 
 **Pattern syntax:**
 ```bash
@@ -131,7 +155,7 @@ repos reset my-service   # the repo matching the search term, from anywhere
 
 #### repos cache
 
-Scans for repositories and updates the cache file.
+Scans every root in `REPO_ROOTS` for repositories and updates the cache file. A missing root is skipped with a warning.
 
 ```bash
 repos cache
@@ -141,13 +165,14 @@ repos cache
 ```bash
 repos cache
 # Output:
-# 🔍 Scanning for repos in /mnt/c/Code...
-# ✅ Found 23 repos, cache updated
+# 🔍 Scanning wsl (/home/dave/repos)...
+# 🔍 Scanning win (/mnt/c/Code)...
+# ✅ Found 125 repos (2 with copies in several roots), cache updated
 # 🔍 Checking GitHub for archived repos...
 # 🔒 2 archived (readonly) repo(s) recorded
 ```
 
-After rebuilding the cache, `repos cache` queries GitHub (via `gh`) for repos that are **archived** across every owner it finds among your cloned repos, and records their local paths in `repos-readonly.lst`. Archived repos are treated as read-only: `repos ls` marks them with 🔒 and `repos cd` warns when you enter one. If `gh` is unavailable the readonly list is left untouched.
+After rebuilding the cache, `repos cache` queries GitHub (via `gh`) for repos that are **archived** across every owner it finds among your cloned repos, and records their `owner/name` ids in `repos-readonly.lst`, so every copy of an archived repo is covered. Archived repos are treated as read-only: `repos ls` marks them with 🔒 and `repos cd` warns when you enter one. If `gh` is unavailable the readonly list is left untouched.
 
 **Note:** The cache respects patterns in your `.reposignore` file. See [.reposignore](#reposignore) for configuration.
 
@@ -198,7 +223,7 @@ Lists repositories from the cache, one per line, with a status emoji.
 repos ls [search] [flags]
 ```
 
-**Emoji:** 🔒 readonly (archived on GitHub), 📝 modified (uncommitted changes), 🌿 on a branch (other work in progress), 📁 otherwise. Modified/branch state is read from the last `repos status` snapshot (`repos-status.json`).
+**Emoji:** 🔒 readonly (archived on GitHub), 📝 modified (uncommitted changes), 🌿 on a branch (other work in progress), 📁 otherwise. Modified/branch state is read from the last `repos status` snapshot (`repos-status.json`). Each line is tagged with its root, and ⇄ marks a repo cloned in more than one root.
 
 **Parameters:**
 - `search` - optional term; lists only repos whose path matches (case-insensitive)
@@ -211,13 +236,14 @@ repos ls [search] [flags]
 **Example:**
 ```bash
 repos ls terraform
-# 📁 infra/terraform-modules
-# 🔒 archive/terraform-legacy
+# 🔒 [win] archive/terraform-legacy
+# 📁 [win] infra/terraform-modules ⇄
+# 📁 [wsl] terraform-modules ⇄
 ```
 
 #### repos find
 
-Raw grep of the cache: prints matching repo paths (relative to `REPO_HOME`) with no emoji and no cross-check against the status or readonly files. With no term it prints the whole cache. This is the plain, script-friendly counterpart to `repos ls`.
+Prints the absolute path of every cached copy whose relative path matches the term (a regex, case-insensitive, optional `wsl:`/`win:` prefix), with no emoji and no cross-check against the status or readonly files. With no term it prints every cached repo. This is the plain, script-friendly counterpart to `repos ls`.
 
 ```bash
 repos find [search]
@@ -226,8 +252,9 @@ repos find [search]
 **Example:**
 ```bash
 repos find terraform
-# infra/terraform-modules
-# archive/terraform-legacy
+# /mnt/c/Code/infra/terraform-modules
+# /mnt/c/Code/archive/terraform-legacy
+# /home/dave/repos/terraform-modules
 ```
 
 #### repos status
@@ -354,7 +381,7 @@ repos <TAB>
 
 # Fuzzy-find repo for ls/find/code/edit/ide/cmd/cd/resolve/claude/view commands
 repos code <TAB>
-# Opens fzf picker with directory preview to select a repo
+# Opens fzf picker with directory preview; completes to root:relpath, e.g. wsl:am-ui-applications
 ```
 
 #### repos code
@@ -374,9 +401,11 @@ repos code myapp
 # Opens VS Code in the matching repository
 ```
 
+A Windows copy opens in Windows VS Code; a WSL copy opens through the WSL `code` launcher (Remote - WSL).
+
 #### repos ide
 
-Opens a matching repository's solution file in Visual Studio. `repos vs` is an alias.
+Opens a matching repository's solution file in Visual Studio. `repos vs` is an alias. Prefers the `REPO_PREFER_WINDOWS_APPS` copy.
 
 ```bash
 repos ide [search]
@@ -404,7 +433,7 @@ repos ide documents
 
 #### repos cmd
 
-Opens a WSL window in a matching repository.
+Opens a WSL window in a matching repository (via `wsl.exe --cd`, so WSL copies work too).
 
 ```bash
 repos cmd [search]
@@ -421,7 +450,7 @@ repos cmd myapp
 
 #### repos view
 
-Opens a matching repository in GitHub Desktop.
+Opens a matching repository in GitHub Desktop. Prefers the `REPO_PREFER_WINDOWS_APPS` copy; `repos work` does the same for its VS Code window.
 
 ```bash
 repos view [search]
@@ -459,7 +488,7 @@ repos cd [search]
 **Example:**
 ```bash
 repos cd myapp
-# 📂 quartex-services/myapp   (pushd into the matching repository)
+# 📂 [win] quartex-services/myapp   (pushd into the matching repository)
 ```
 
 #### repos resolve
@@ -715,7 +744,7 @@ gwt gadd platform feature/add-logging -b
 
 ### Repo Groups Configuration
 
-Groups are defined in `$REPO_GROUPS` (default: `$REPO_HOME/repos-groups.cfg`).
+Groups are defined in `$REPO_GROUPS` (default: `~/.local/state/repos/repos-groups.cfg`).
 
 **Format:**
 ```

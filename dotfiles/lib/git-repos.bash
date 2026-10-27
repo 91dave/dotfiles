@@ -31,7 +31,7 @@ _fzf_complete_repos() {
             ;&
         find|code|cmd|cd|resolve|claude|cc|edit|ide|vs|view|work|reset)
             local -a matches
-            mapfile -t matches < <(grep -- "$cur" "$REPO_CACHE")
+            mapfile -t matches < <(_repos_picker_list | cut -f1 | grep -- "$cur")
 
             if [[ ${#matches[@]} -eq 1 ]]; then
                 COMPREPLY=( "${matches[0]}" )
@@ -39,8 +39,8 @@ _fzf_complete_repos() {
             fi
 
             local selected
-            selected=$(fzf --height=70% --layout=reverse --query="$cur" \
-                --preview "$EZA_PREVIEW $REPO_HOME/{}" < "$REPO_CACHE")
+            selected=$(_repos_picker_list | fzf --height=70% --layout=reverse --query="$cur" \
+                --delimiter='\t' --with-nth=1 --preview "$EZA_PREVIEW {2}" | cut -f1)
             if [[ -n "$selected" ]]; then
                 COMPREPLY=( "$selected" )
             fi

@@ -18,11 +18,11 @@ Summarise in-progress work across all local repos from the `repos status` snapsh
 
 ## Step 1: Locate and freshen the snapshot
 
-The snapshot lives at `$REPO_STATUS` (falls back to `$REPO_HOME/repos-status.json`, i.e.
-`/mnt/c/Code/repos-status.json`). It is written every time `repos status` runs.
+The snapshot lives at `$REPO_STATUS` (falls back to `~/.local/state/repos/repos-status.json`).
+It is written every time `repos status` runs.
 
 ```bash
-STATUS="${REPO_STATUS:-/mnt/c/Code/repos-status.json}"
+STATUS="${REPO_STATUS:-$HOME/.local/state/repos/repos-status.json}"
 ```
 
 Decide whether to refresh:
@@ -43,7 +43,10 @@ repos status >/dev/null 2>&1
 jq . "$STATUS"
 ```
 
-Each entry in `.repos` has: `name`, `path`, `branch`, `default_branch`, `merged`,
+`.roots` maps each root name (`wsl`, `win`) to its directory. A repo cloned in both roots
+appears once per copy; say which root each entry is in when the same `name` shows twice.
+
+Each entry in `.repos` has: `name`, `path` (relative to its root), `root`, `abs_path`, `branch`, `default_branch`, `merged`,
 `dirty_files`, `unmerged_commits`, `last_activity` (YYYY-MM-DD), `commits` (newest first,
 each with `sha`, `date`, `subject`), and `changed_files`.
 
@@ -91,7 +94,7 @@ Close with the distinct work items in flight, e.g. `In flight: AB#35887, AB#3589
 Offer, without doing them unprompted:
 
 - Look up any `AB#` item for its title and state (`cli-anything-azdo --json workitem show <id>`).
-- Dig into a specific repo (`cd` to its `path` under `$REPO_HOME` and run `git log`/`git diff`).
+- Dig into a specific repo (`cd` to its `abs_path` and run `git log`/`git diff`).
 - Tidy up: `repos clear` for merged branches, or commit the dirty repos.
 
 ## Notes

@@ -12,6 +12,10 @@ cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 
 export REPO_HOME="$WORK/home"
+export WSL_ROOT="$WORK/wsl"
+export REPO_ROOTS="wsl=$WSL_ROOT win=$REPO_HOME"
+export REPO_PREFER=wsl
+export REPO_PREFER_WINDOWS_APPS=win
 export REPO_CACHE="$WORK/repos-cache.lst"
 export REPO_STATUS="$WORK/repos-status.json"
 export REPO_READONLY="$WORK/repos-readonly.lst"
@@ -59,7 +63,14 @@ make_repo() {
         git commit -q -m base
         git push -q origin main 2>/dev/null
     )
-    echo "$name" >> "$REPO_CACHE"
+    _repos_cache_build >/dev/null
+}
+
+# Second clone of an existing origin at $WSL_ROOT/$2 (defaults to the same name)
+clone_into_wsl() {
+    local name="$1" rel="${2:-$1}"
+    git clone -q "$WORK/origin-$name.git" "$WSL_ROOT/$rel" 2>/dev/null
+    _repos_cache_build >/dev/null
 }
 
 # Push a commit to origin/main from a second clone so the local clone is behind
@@ -74,7 +85,7 @@ branch_of() { git -C "$REPO_HOME/$1" branch --show-current; }
 has_branch() { git -C "$REPO_HOME/$1" show-ref --verify --quiet "refs/heads/$2" && echo yes || echo no; }
 porcelain() { git -C "$REPO_HOME/$1" status --porcelain; }
 
-mkdir -p "$REPO_HOME"
+mkdir -p "$REPO_HOME" "$WSL_ROOT"
 : > "$REPO_CACHE"
 
 echo "reset . discards uncommitted changes on main and pulls"
@@ -134,6 +145,60 @@ contains "explains" "not inside a git repo" "$out"
 echo "reset <term> with no match fails"
 out=$(cd "$WORK" && _repos_dispatch reset nomatch </dev/null 2>&1); rc=$?
 check "non-zero exit" "1" "$rc"
+
+echo "cache indexes every root and links copies of the same repo"
+make_repo omega
+clone_into_wsl omega
+make_repo omega-barrels
+mkdir -p "$REPO_HOME/nested"
+make_repo nested/theta
+clone_into_wsl nested/theta theta
+check "win copy cached" "1" "$(awk -F'\t' -v p="$REPO_HOME/omega" '$1 == "win" && $4 == p' "$REPO_CACHE" | wc -l)"
+check "wsl copy cached" "1" "$(awk -F'\t' -v p="$WSL_ROOT/omega" '$1 == "wsl" && $4 == p' "$REPO_CACHE" | wc -l)"
+check "copies share an id" "1" "$(awk -F'\t' '$2 == "omega"' "$REPO_CACHE" | cut -f3 | sort -u | wc -l)"
+
+echo "resolve prefers the wsl copy and warns about the other"
+out=$(_repos_dispatch resolve omega 2>"$WORK/err"); err=$(cat "$WORK/err")
+check "wsl path" "$WSL_ROOT/omega" "$out"
+contains "warns about win copy" "[win] $REPO_HOME/omega" "$err"
+
+echo "resolve matches copies at different relative paths"
+out=$(_repos_dispatch resolve theta 2>/dev/null)
+check "wsl path" "$WSL_ROOT/theta" "$out"
+
+echo "resolve with a root prefix picks that copy without warning"
+out=$(_repos_dispatch resolve win:omega 2>"$WORK/err")
+check "win path" "$REPO_HOME/omega" "$out"
+check "no warning" "" "$(cat "$WORK/err")"
+
+echo "Windows apps prefer the win copy"
+check "win path" "$REPO_HOME/omega" "$(_repos_target_path omega "$REPO_PREFER_WINDOWS_APPS" 2>/dev/null)"
+
+echo "a term ambiguous between different repos fails"
+out=$(_repos_dispatch resolve omeg 2>&1); rc=$?
+check "non-zero exit" "1" "$rc"
+contains "lists candidates" "omega-barrels" "$out"
+
+echo "find prints absolute paths of every copy"
+check "both copies" "$REPO_HOME/omega
+$WSL_ROOT/omega" "$(_repos_dispatch find '^omega$' | sort)"
+
+echo "ls tags the root and marks repos with several copies"
+out=$(_repos_dispatch ls omega)
+contains "wsl copy marked" "[wsl] omega ⇄" "$out"
+contains "win copy marked" "[win] omega ⇄" "$out"
+contains "single copy unmarked" "[win] omega-barrels"$'\n' "$out"$'\n'
+check "sorted by name, copies together" "omega omega omega-barrels" "$(awk '{print $3}' <<< "$out" | paste -sd' ')"
+
+echo "status reports each copy and records its root"
+(cd "$WSL_ROOT/omega" && echo dirty >> base.txt)
+(cd "$REPO_HOME/omega" && git checkout -q -b feature)
+out=$(_repos_dispatch status 2>&1)
+contains "dirty wsl copy" "[wsl] omega (main, 1 file(s))" "$out"
+contains "win copy on branch" "[win] omega (feature)" "$out"
+check "status json abs paths" "$REPO_HOME/omega
+$WSL_ROOT/omega" "$(jq -r '.repos[] | select(.name == "omega") | .abs_path' "$REPO_STATUS" | sort)"
+check "status json roots" "$WSL_ROOT" "$(jq -r '.roots.wsl' "$REPO_STATUS")"
 
 echo
 echo "$PASS passed, $FAIL failed"
