@@ -53,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook permission",
+            "command": "bash $HOME/repos/dotfiles/dotfiles/bin/agent-state hook permission",
             "timeout": 5
           }
         ]
@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook waiting",
+            "command": "bash $HOME/repos/dotfiles/dotfiles/bin/agent-state hook waiting",
             "timeout": 5
           }
         ]
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook working",
+            "command": "bash $HOME/repos/dotfiles/dotfiles/bin/agent-state hook working",
             "timeout": 5
           }
         ]
@@ -86,7 +86,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook question",
+            "command": "bash $HOME/repos/dotfiles/dotfiles/bin/agent-state hook question",
             "timeout": 5
           }
         ]
@@ -96,7 +96,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook plan",
+            "command": "bash $HOME/repos/dotfiles/dotfiles/bin/agent-state hook plan",
             "timeout": 5
           }
         ]
@@ -117,7 +117,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/agents/hooks/askuserquestion-preview-guard.sh",
+            "command": "bash $HOME/repos/dotfiles/dotfiles/agents/hooks/askuserquestion-preview-guard.sh",
             "timeout": 10,
             "statusMessage": "Blocking preview-style questions"
           }
@@ -128,7 +128,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/agents/hooks/command-guard.sh",
+            "command": "bash $HOME/repos/dotfiles/dotfiles/agents/hooks/command-guard.sh",
             "timeout": 10,
             "statusMessage": "Enforce bash rules"
           }
@@ -140,13 +140,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{ echo \"[$(date)] Claude Code Session Startup\"; cd /mnt/c/Code/_docs/docs-claude-helpers && git.exe pull --rebase --ff-only && /mnt/c/Code/_personal/dotfiles/dotfiles/agents/sync-agents.sh ; } > /tmp/claude-session-start.log 2>&1 || true",
+            "command": "{ echo \"[$(date)] Claude Code Session Startup\"; cd /mnt/c/Code/_docs/docs-claude-helpers && git.exe pull --rebase --ff-only && $HOME/repos/dotfiles/dotfiles/agents/sync-agents.sh ; } > /tmp/claude-session-start.log 2>&1 || true",
             "timeout": 120,
             "statusMessage": "Syncing docs-claude-helpers and rebuilding agents"
           },
           {
             "type": "command",
-            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook idle",
+            "command": "bash $HOME/repos/dotfiles/dotfiles/bin/agent-state hook idle",
             "timeout": 5
           }
         ]
@@ -157,7 +157,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state end",
+            "command": "bash $HOME/repos/dotfiles/dotfiles/bin/agent-state end",
             "timeout": 5
           }
         ]
@@ -168,7 +168,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook done",
+            "command": "bash $HOME/repos/dotfiles/dotfiles/bin/agent-state hook done",
             "timeout": 5
           }
         ]
@@ -179,7 +179,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /mnt/c/Code/_personal/dotfiles/dotfiles/bin/agent-state hook working",
+            "command": "bash $HOME/repos/dotfiles/dotfiles/bin/agent-state hook working",
             "timeout": 5
           }
         ]
