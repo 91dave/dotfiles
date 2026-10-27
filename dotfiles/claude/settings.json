@@ -43,7 +43,6 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opus",
   "skillOverrides": {
     "work-item-authoring": "user-invocable-only"
   },
@@ -203,10 +202,12 @@
       }
     }
   },
+  "feedbackDrafts": "off",
   "effortLevel": "high",
   "askUserQuestionTimeout": "never",
   "tui": "fullscreen",
   "autoMemoryEnabled": false,
-  "skipAutoPermissionPrompt": true,
-  "feedbackDrafts": "off"
+  "skipWorkflowUsageWarning": true,
+  "switchModelsOnFlag": true,
+  "skipAutoPermissionPrompt": true
 }
