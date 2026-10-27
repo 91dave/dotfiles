@@ -47,7 +47,8 @@ for rule in "${RULES[@]}"; do
   fi
 done
 
-LOOKS_LIKE_A_JEST_RUN='(^|[|&;(][[:space:]]*)(npx[[:space:]]+)?(nx[[:space:]]+(test|run-many|run[[:space:]]+[^[:space:];]+:test)|jest)([[:space:]]|;|$)'
+TARGETS_INCLUDING_TEST='(-t|--targets?)[[:space:]=]+([^[:space:];|&]*,)?test(,[^[:space:];|&]*)?'
+LOOKS_LIKE_A_JEST_RUN="(^|[|&;(][[:space:]]*)(npx[[:space:]]+)?(nx[[:space:]]+(test|(run-many|affected)[^;|&]*[[:space:]]${TARGETS_INCLUDING_TEST}|run[[:space:]]+[^[:space:];]+:test)|jest)([[:space:]]|;|\$)"
 WORKER_COUNT_ALREADY_BOUNDED='--maxWorkers|--runInBand|--workerIdleMemoryLimit|[[:space:]]-w[[:space:]=]'
 
 if [[ "$NORMALISED" =~ $LOOKS_LIKE_A_JEST_RUN ]] && [[ ! "$NORMALISED" =~ $WORKER_COUNT_ALREADY_BOUNDED ]]; then
