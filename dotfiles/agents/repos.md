@@ -11,3 +11,5 @@ repos ls [term]                  # human-facing list with state (🔒 readonly, 
 ```
 
 If `resolve` reports multiple matches, re-run with a longer subpath (`repos resolve services/qtms-documents`) rather than adding a step. When a repo is cloned in both roots, `resolve` returns the WSL copy and warns on stderr about the other.
+
+If I mention using "feature branching" workflow/strategy/approach, it means that the current repo has `feature/*` protected. Thus create and push `feature/{name}` off main, then create `work/{name}` off the feature and commit to the work branch, then push and PR targeting the feature branch. Subsequent work should continue pushing fresh work branches off the feature branch, and PRs target the feature branch until such time as the feature branch is ready to merge to main.
