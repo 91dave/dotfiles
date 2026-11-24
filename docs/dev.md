@@ -229,7 +229,7 @@ cc
 # Or use repos/gwt/gws integration
 repos claude myapp
 gwt claude feature/new-ui
-gws claude my-workspace
+gws cc my-workspace
 ```
 
 ## Optional Helper Utilities

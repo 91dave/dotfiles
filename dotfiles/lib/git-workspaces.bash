@@ -9,7 +9,7 @@ _gws_help() {
     echo "  gws ls                  📋 List all workspaces"
     echo "  gws cd                  📂 pushd into workspace root"
     echo "  gws cd <workspace>      📂 pushd into matching workspace"
-    echo "  gws claude <workspace>  🤖 Open Claude Code in matching workspace"
+    echo "  gws cc <workspace>      🤖 Open Claude Code via cc (tmux) in matching workspace (alias: claude)"
     echo "  gws edit <workspace>    🚀 Open VS Code in matching workspace"
     echo "  gws cmd <workspace>     💻 Open WSL window in matching workspace"
     echo "  gws help                📖 Show this help message"
@@ -64,25 +64,34 @@ _gws_cd() {
         return
     fi
 
-    local ws=$(_gws_find "$search") || return 1
+    local ws
+    ws=$(_gws_find "$search") || return 1
 
     local ws_path="$WORKSPACE_HOME/$ws"
     echo "📂 $ws"
     pushd "$ws_path" > /dev/null
 }
 
+# Delegates to the interactive cc function, which owns tmux session handling
 _gws_claude() {
+    if ! declare -F cc >/dev/null; then
+        echo "❌ Error: cc not loaded; run 'gws cc' from an interactive shell" >&2
+        return 1
+    fi
+
     local search="$1"
-    local ws=$(_gws_find "$search") || return 1
+    local ws
+    ws=$(_gws_find "$search") || return 1
 
     local ws_path="$WORKSPACE_HOME/$ws"
     echo "🤖 Opening Claude Code in $ws..."
-    (cd "$ws_path" && cmd.exe /c claude)
+    (cd "$ws_path" && cc)
 }
 
 _gws_edit() {
     local search="$1"
-    local ws=$(_gws_find "$search") || return 1
+    local ws
+    ws=$(_gws_find "$search") || return 1
 
     local ws_path="$WORKSPACE_HOME/$ws"
     echo "🚀 Opening VS Code in $ws..."
@@ -91,7 +100,8 @@ _gws_edit() {
 
 _gws_cmd() {
     local search="$1"
-    local ws=$(_gws_find "$search") || return 1
+    local ws
+    ws=$(_gws_find "$search") || return 1
 
     local ws_path="$WORKSPACE_HOME/$ws"
     echo "💻 Opening WSL in $ws..."
@@ -104,7 +114,7 @@ gws() {
     case "$cmd" in
         ls)             _gws_ls ;;
         cd)             _gws_cd "$2" ;;
-        claude)         _gws_claude "$2" ;;
+        claude|cc)      _gws_claude "$2" ;;
         edit|code)      _gws_edit "$2" ;;
         cmd)            _gws_cmd "$2" ;;
         *)              _gws_help ;;
@@ -118,13 +128,13 @@ _fzf_complete_gws() {
 
     # First arg: complete subcommands
     if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "ls cd claude edit code cmd help" -- "$cur") )
+        COMPREPLY=( $(compgen -W "ls cd cc claude edit code cmd help" -- "$cur") )
         return
     fi
 
     # Second arg: use fzf to pick a workspace
     case "$cmd" in
-        cd|claude|edit|code|cmd)
+        cd|cc|claude|edit|code|cmd)
             local selected
             selected=$(ls -1d "$WORKSPACE_HOME"/*/ 2>/dev/null | xargs -n1 basename | \
                 fzf --height=70% --layout=reverse --preview "$EZA_PREVIEW $WORKSPACE_HOME/{}")

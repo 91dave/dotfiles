@@ -864,7 +864,7 @@ gws [cmd] [workspace]
 | Command | Description |
 |---------|-------------|
 | `gws cd <workspace>` | pushd into matching workspace |
-| `gws claude <workspace>` | Open Claude Code in matching workspace |
+| `gws cc <workspace>` | Open Claude Code in matching workspace via the `cc` shell function, so it gets the same tmux handling. `gws claude` is an alias. Needs an interactive shell |
 | `gws edit <workspace>` | Open VS Code in matching workspace |
 | `gws code <workspace>` | Synonym for `edit` |
 | `gws cmd <workspace>` | Open WSL window in matching workspace |
@@ -877,7 +877,7 @@ gws [cmd] [workspace]
 gws cd platform
 # pushd into the workspace matching "platform"
 
-gws claude my-project
+gws cc my-project
 # Opens Claude Code in the matching workspace
 ```
 
@@ -888,7 +888,7 @@ The `gws` command supports fzf-powered tab completion:
 ```bash
 # Complete subcommands
 gws <TAB>
-# Shows: cd, claude, edit, code, cmd, help
+# Shows: ls, cd, cc, claude, edit, code, cmd, help
 
 # Fuzzy-find workspace
 gws cd <TAB>

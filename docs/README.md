@@ -67,7 +67,7 @@ Use workspaces for multi-repo projects or custom directory setups that aren't ti
 gws cd my-project
 
 # Open a workspace in Claude Code or VS Code
-gws claude my-project
+gws cc my-project
 gws edit my-project
 ```
 

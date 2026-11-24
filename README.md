@@ -49,7 +49,7 @@ Comprehensive documentation for all helper functions and aliases is available in
 - `agents` - Jump to any AI agent pane in any tmux session, waiting ones first. Agent hooks stamp their state onto their tmux pane, so the status bar shows which sessions need you and window tabs colour by agent state ([docs](docs/tmux.md))
 - `ce <cmd>` - Container engine manager (check/fix/help)
 - `dev_help` - Development helpers
-- `gws <cmd>` - Workspace manager (cd/claude/edit/cmd)
+- `gws <cmd>` - Workspace manager (cd/cc/edit/cmd)
 - `khelp` - Kubernetes helpers
 - `reload` - Reload all dotfiles without restarting shell
 - `repos reset [repo|.]` - Daily refresh (fetch + clear + status), or with a target: discard changes, back to main, pull, delete branch
