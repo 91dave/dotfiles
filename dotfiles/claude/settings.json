@@ -140,9 +140,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{ echo \"[$(date)] Claude Code Session Startup\"; cd /mnt/c/Code/_docs/docs-claude-helpers && git.exe pull --rebase --ff-only && $HOME/repos/dotfiles/dotfiles/agents/sync-agents.sh ; } > /tmp/claude-session-start.log 2>&1 || true",
+            "command": "{ echo \"[$(date)] Claude Code Session Startup\"; cd /mnt/c/Code/_docs/docs-claude-helpers && git.exe pull --rebase --ff-only && $HOME/repos/dotfiles/dotfiles/agents/sync-agents.sh ; echo \"[$(date)] done\"; } > /tmp/claude-session-start.log 2>&1 < /dev/null &",
             "timeout": 120,
-            "statusMessage": "Syncing docs-claude-helpers and rebuilding agents"
+            "statusMessage": "Starting background sync of docs-claude-helpers"
           },
           {
             "type": "command",
