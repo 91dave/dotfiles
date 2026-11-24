@@ -203,11 +203,13 @@
     }
   },
   "feedbackDrafts": "off",
+  "spinnerTipsEnabled": false,
   "effortLevel": "high",
   "askUserQuestionTimeout": "never",
   "tui": "fullscreen",
   "autoMemoryEnabled": false,
   "skipWorkflowUsageWarning": true,
+  "editorMode": "normal",
   "switchModelsOnFlag": true,
   "skipAutoPermissionPrompt": true
 }
