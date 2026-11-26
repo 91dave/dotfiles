@@ -15,10 +15,29 @@ _REPOS_GIT_EXE=$(command -v git.exe 2>/dev/null)
 # Windows git reads NTFS directly; Linux git over the WSL 9P bridge is ~50x slower on large repos
 _repos_git() {
     if [[ -n "$_REPOS_GIT_EXE" && "${REPOS_WINDOWS_GIT:-1}" == 1 && "$PWD" == /mnt/[a-z]/* ]]; then
-        "$_REPOS_GIT_EXE" "$@" | tr -d '\r'
-        return "${PIPESTATUS[0]}"
+        _repos_git_windows "$@"
+        return
     fi
     git "$@"
+}
+
+# Under concurrency WSL interop drops some .exe calls: empty stdout, exit 0, a '<3>WSL ... ERROR' line on stderr
+_repos_git_windows() {
+    local tmp rc attempt
+    tmp=$(mktemp -d)
+    for attempt in 1 2 3; do
+        "$_REPOS_GIT_EXE" "$@" >"$tmp/out" 2>"$tmp/err"; rc=$?
+        grep -q '^<3>WSL .*ERROR' "$tmp/err" || break
+    done
+    if grep -q '^<3>WSL .*ERROR' "$tmp/err"; then
+        rm -rf "$tmp"
+        git "$@"
+        return
+    fi
+    tr -d '\r' <"$tmp/out"
+    tr -d '\r' <"$tmp/err" >&2
+    rm -rf "$tmp"
+    return "$rc"
 }
 
 _git_get_default_branch() {
@@ -536,6 +555,7 @@ _repos_clear_worker() {
     [[ -z "$default_branch" ]] && return
 
     local current_branch=$(_repos_git </dev/null branch --show-current 2>/dev/null)
+    local current_label=${current_branch:-detached HEAD}
     local deleted=0 body=""
 
     if [[ "$current_branch" != "$default_branch" ]]; then
@@ -557,18 +577,20 @@ _repos_clear_worker() {
         local tracked_dirty=$(printf '%s\n' "$status" | grep -vE '^(\?\?|[[:space:]]*$)')
 
         if [[ -n "$tracked_dirty" ]]; then
-            body+="   ⏭️  Kept: $current_branch (uncommitted changes)"$'\n'
+            body+="   ⏭️  Kept: $current_label (uncommitted changes)"$'\n'
         elif _repos_own_unmerged "$default_branch" HEAD; then
-            body+="   ⏭️  Kept: $current_branch (unmerged commits of yours)"$'\n'
+            body+="   ⏭️  Kept: $current_label (unmerged commits of yours)"$'\n'
         elif _repos_git </dev/null checkout "$default_branch" >& /dev/null; then
-            body+="   🔄 Switched: $current_branch → $default_branch"$'\n'
-            local o rc
-            o=$(_repos_clear_branch "$default_branch" "$current_branch"); rc=$?
-            [[ -n "$o" ]] && body+="$o"$'\n'
-            [[ $rc -eq 0 ]] && deleted=$((deleted + 1))
+            body+="   🔄 Switched: $current_label → $default_branch"$'\n'
+            if [[ -n "$current_branch" ]]; then
+                local o rc
+                o=$(_repos_clear_branch "$default_branch" "$current_branch"); rc=$?
+                [[ -n "$o" ]] && body+="$o"$'\n'
+                [[ $rc -eq 0 ]] && deleted=$((deleted + 1))
+            fi
             _repos_git </dev/null pull >& /dev/null
         else
-            body+="   ❌ Failed to switch: $current_branch → $default_branch"$'\n'
+            body+="   ❌ Failed to switch: $current_label → $default_branch"$'\n'
         fi
     elif [[ "$all" != true ]]; then
         return
@@ -760,9 +782,9 @@ _repos_status_worker() {
         [[ "$dirty_count" -gt 0 ]] && dirty_note=" 📝 $dirty_count file(s)"
         if [[ "$unmerged" -eq 0 ]]; then
             merged=true
-            printf 'OFF\t📁 %s (%s) ✅ merged%s\n' "$label" "$current_branch" "$dirty_note" >> "$out.cat"
+            printf 'OFF\t📁 %s (%s) ✅ merged%s\n' "$label" "${current_branch:-detached HEAD}" "$dirty_note" >> "$out.cat"
         else
-            printf 'OFF\t📁 %s (%s) ⚠️  %s unmerged commit(s)%s\n' "$label" "$current_branch" "$unmerged" "$dirty_note" >> "$out.cat"
+            printf 'OFF\t📁 %s (%s) ⚠️  %s unmerged commit(s)%s\n' "$label" "${current_branch:-detached HEAD}" "$unmerged" "$dirty_note" >> "$out.cat"
         fi
     fi
 

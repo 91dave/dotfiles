@@ -200,6 +200,50 @@ check "status json abs paths" "$REPO_HOME/omega
 $WSL_ROOT/omega" "$(jq -r '.repos[] | select(.name == "omega") | .abs_path' "$REPO_STATUS" | sort)"
 check "status json roots" "$WSL_ROOT" "$(jq -r '.roots.wsl' "$REPO_STATUS")"
 
+# Stand-in for git.exe whose first $1 calls lose output to a WSL interop drop, as seen under concurrency
+make_flaky_git_exe() {
+    local drops="$1" fake="$WORK/flaky-git.exe"
+    echo 0 > "$WORK/flaky-calls"
+    cat > "$fake" <<EOF
+#!/bin/bash
+calls=\$(( \$(cat "$WORK/flaky-calls") + 1 )); echo "\$calls" > "$WORK/flaky-calls"
+if (( calls <= $drops )); then
+    echo "<3>WSL (123 - ) ERROR: UtilAcceptVsock:281: accept4 failed 110" >&2
+    exit 0
+fi
+exec git "\$@"
+EOF
+    chmod +x "$fake"
+    echo "$fake"
+}
+
+echo "windows git retries a call dropped by WSL interop"
+make_repo iota
+_REPOS_GIT_EXE=$(make_flaky_git_exe 2)
+out=$(cd "$REPO_HOME/iota" && _repos_git_windows branch --show-current 2>"$WORK/err")
+check "branch reported" "main" "$out"
+check "interop noise hidden" "" "$(cat "$WORK/err")"
+
+echo "windows git falls back to linux git when interop keeps failing"
+_REPOS_GIT_EXE=$(make_flaky_git_exe 99)
+out=$(cd "$REPO_HOME/iota" && _repos_git_windows branch --show-current 2>/dev/null)
+check "branch reported" "main" "$out"
+
+echo "windows git passes through genuine errors and exit codes"
+_REPOS_GIT_EXE=$(make_flaky_git_exe 0)
+out=$(cd "$REPO_HOME/iota" && _repos_git_windows rev-parse --verify refs/heads/nope 2>"$WORK/err"); rc=$?
+check "non-zero exit" "128" "$rc"
+contains "stderr kept" "Needed a single revision" "$(cat "$WORK/err")"
+_REPOS_GIT_EXE=""
+
+echo "clear on a detached HEAD switches to main without deleting a branch"
+make_repo kappa
+(cd "$REPO_HOME/kappa" && git checkout -q --detach)
+out=$(_repos_dispatch clear 2>&1)
+check "on main" "main" "$(branch_of kappa)"
+contains "reports detached HEAD" "detached HEAD → main" "$out"
+check "no delete attempted" "no" "$([[ "$out" == *"Failed to delete"* ]] && echo yes || echo no)"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]
